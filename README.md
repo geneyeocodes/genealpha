@@ -46,11 +46,13 @@ The app guides you through 4 steps:
 
 ### 1. Idea (Input → Extract)
 
-Paste a trading idea as free-form text, a YouTube URL, a PDF document, or strategy code. The backend's `extractor` module sends it to Claude or GPT and returns a structured strategy configuration (entry/exit conditions, position sizing, stop loss, parameters).
+Paste a trading idea as free-form text, a YouTube URL, a PDF document, or strategy code. The backend's `extractor` module sends it to Claude or GPT and returns a structured `StrategyConfig` — entry/exit conditions, indicator references, position sizing, stop loss, take profit, and timeframe.
+
 
 ### 2. Backtest
 
-Select a strategy (EMA Crossover, RSI Mean Reversion, or Volatility Breakout) and a date range. The backend fetches historical data from yFinance, runs a simulation, and returns metrics — total return, Sharpe ratio, max drawdown, win rate, total trades, and an equity curve.
+The extracted strategy is evaluated by a config-driven engine. Entry and exit conditions (crossover, crossunder, comparison, range) are computed against historical data from yFinance using technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands, ATR, Stochastic, OBV, VWAP). The simulation returns performance metrics — total return, Sharpe ratio, max drawdown, win rate, total trades, profit factor, and an equity curve.
+
 
 ### 3. Optimize
 
@@ -68,7 +70,7 @@ genealpha/
 │   ├── main.py         # App entry point
 │   ├── api/            # REST + WebSocket endpoints
 │   ├── core/           # Config, DB, models, schemas, datafeed, IBKR
-│   ├── strategies/     # Trading strategy implementations
+│   ├── strategies/     # Config-driven strategy engine
 │   ├── extractor/      # AI-powered idea extraction
 │   └── optimizer/      # Hyperparameter optimization
 ├── frontend/           # React + Vite SPA
@@ -89,18 +91,21 @@ All endpoints live under `http://localhost:8000/api/v1/`.
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | **GET** | `/health` | Health check |
-| **GET** | `/bots` | List all bots |
-| **POST** | `/bots` | Create a bot |
-| **PATCH** | `/bots/{id}` | Update a bot |
-| **DELETE** | `/bots/{id}` | Delete a bot |
-| **POST** | `/bots/{id}/start` | Start a bot |
-| **POST** | `/bots/{id}/stop` | Stop a bot |
-| **GET** | `/strategies` | List available strategies |
-| **GET** | `/backtest` | List backtest results |
-| **POST** | `/backtest` | Run a backtest |
-| **GET** | `/optimize` | List optimization runs |
-| **POST** | `/optimize` | Run optimization |
-| **WS** | `/ws/live` | Real-time bot status updates |
+| **GET** | `/api/v1/bots` | List all bots |
+| **GET** | `/api/v1/bots/{bot_id}` | Get a single bot |
+| **POST** | `/api/v1/bots` | Create a bot |
+| **PATCH** | `/api/v1/bots/{bot_id}` | Update a bot |
+| **DELETE** | `/api/v1/bots/{bot_id}` | Delete a bot |
+| **POST** | `/api/v1/bots/{bot_id}/start` | Start a bot |
+| **POST** | `/api/v1/bots/{bot_id}/stop` | Stop a bot |
+| **GET** | `/api/v1/strategies/schema` | Get strategy config JSON schema |
+| **GET** | `/api/v1/strategies/indicators` | List supported indicators |
+| **POST** | `/api/v1/strategies/backtest` | Run a backtest from a strategy config |
+| **GET** | `/api/v1/backtest` | List backtest results |
+| **GET** | `/api/v1/backtest/{backtest_id}` | Get a single backtest result |
+| **POST** | `/api/v1/backtest` | Run a backtest (with symbol + date range) |
+| **POST** | `/api/v1/optimize` | Run hyperparameter optimization |
+| **WS** | `/api/v1/ws/live` | Real-time bot status updates |
 
 ## Environment Variables
 

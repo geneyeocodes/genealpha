@@ -11,8 +11,8 @@ backend/
 ├── api/
 │   ├── router.py           # Mounts all sub-routers under /api/v1
 │   ├── bots.py             # CRUD for bot instances
-│   ├── strategies.py       # Lists available strategies & param schemas
-│   ├── backtest.py         # Runs historical backtests
+│   ├── strategies.py       # Strategy config schema, indicators, inline backtest
+│   ├── backtest.py         # Runs historical backtests (symbol + date range)
 │   ├── optimize.py         # Triggers hyperparameter optimization
 │   └── ws.py               # WebSocket for real-time status
 ├── core/
@@ -23,10 +23,9 @@ backend/
 │   ├── datafeed.py         # yFinance wrappers (historical, intraday, price)
 │   └── ibkr.py             # IBKRConnector — connect, place orders, positions
 ├── strategies/
-│   ├── base.py             # Abstract StrategyBase (generate_signal, backtest, param_schema)
-│   ├── ema_crossover.py    # EMA crossover with RSI filter + ATR stop
-│   ├── rsi_reversion.py    # RSI mean reversion (oversold/overbought)
-│   └── volatility_breakout.py # Breakout above highest high / below lowest low
+│   ├── __init__.py         # Exports: StrategyConfig, Condition, StrategyEngine, etc.
+│   ├── config_schema.py    # Pydantic models: StrategyConfig, Condition, IndicatorRef, StopLoss, etc.
+│   └── engine.py           # StrategyEngine — signal generation, backtesting, indicator computation
 ├── extractor/
 │   ├── llm_client.py       # Sends trading idea to Claude or GPT, parses JSON
 │   ├── parser.py           # Validates and wraps into ExtractResponse
@@ -34,7 +33,7 @@ backend/
 │   └── youtube_extractor.py# Extracts YouTube transcripts
 └── optimizer/
     ├── search_space.py     # Optuna parameter ranges per strategy
-    └── optimizer.py        # Runs Optuna study, calls strategy.backtest() as objective
+    └── optimizer.py        # Runs Optuna study, calls StrategyEngine.backtest() as objective
 ```
 
 
@@ -50,12 +49,12 @@ backend/
               ▼
        api/router.py (Prefix: /api/v1)
               │
-     ┌────────┼────────┬────────┐
-     ▼        ▼        ▼        ▼
-  api/     api/     api/     api/
-  bots.py  strat.py bckts.py optim.py
-     │        │        │        │
-     └────────┼────────┴────────┘
+     ┌────────┼────────┬────────────┐
+     ▼        ▼        ▼            ▼
+  api/     api/     api/          api/
+  bots.py  strat.py backtest.py  optim.py
+     │        │        │            │
+     └────────┼────────┴────────────┘
               │
               ▼
        core/database.py (get_db session Async)
@@ -63,8 +62,8 @@ backend/
               ▼
        core/models.py (SQLAlchemy ORM Queries)
               │
-              ├─► [ strategies/ ] ──► [ core/datafeed.py ] (yFinance)
-              │   (.backtest())
+              ├─► [ strategies/engine.py ] ──► [ core/datafeed.py ] (yFinance)
+              │   (.backtest() / .generate_signals())
               │
               ├─► [ optimizer/ ] (Optuna Hyperparameters)
               │
@@ -74,7 +73,8 @@ backend/
        core/schemas.py (Pydantic Serialization)
               │
               ▼
-       [ JSON Response ]
+        [ JSON Response ]
+
 ```
 
 ### Module Responsibilities
@@ -103,35 +103,50 @@ backend/
 - **`datafeed.py`** — 3 functions around yFinance: `fetch_historical_data(symbol, start, end, interval)`, `fetch_latest_price(symbol)`, `fetch_intraday_data(symbol, period, interval)`. Returns pandas DataFrames with lowercase/snake-case columns.
 - **`ibkr.py`** — `IBKRConnector` class wrapping `ib_insync`. `connect()` / `disconnect()`, `place_market_order()`, `get_positions()`, `get_account_summary()`.
 
-#### `strategies/` — Trading Logic
+#### `strategies/` — Config-Driven Trading Engine
 
-All strategies inherit from `StrategyBase` which defines 4 abstract methods:
 
-| Method | Purpose |
-|--------|---------|
-| `generate_signal(symbol)` | Fetches recent data, computes indicators, returns `{"side", "quantity", "price", "stop_loss"}` or `None` |
-| `backtest(symbol, start, end)` | Fetches full date range, computes daily signals, calculates position-based returns, returns metrics dict |
-| `get_params()` | Returns current param values |
-| `param_schema()` (classmethod) | Returns param metadata (type, min, max, default) for UI sliders |
+The strategies module replaces the previous fixed-strategy architecture with a fully configurable engine driven by Pydantic schemas.
 
-**Implementation details:**
+**Key Models** (defined in `config_schema.py`)
 
-- **EMA Crossover** — Computes fast/slow EMA, RSI, ATR. Entry when fast EMA crosses above slow EMA AND RSI > threshold. Exit when price < fast EMA or RSI < 40.
-- **RSI Reversion** — Enters when RSI crosses below oversold (buy) or above overbought (sell).
-- **Volatility Breakout** — Enters when price breaks above `highest_high + ATR * factor` (buy) or below `lowest_low - ATR * factor` (sell).
+| Model | Purpose |
+| :--- | :--- |
+| **StrategyConfig** | Complete strategy definition: entry/exit conditions, position sizing, stop loss, take profit, timeframe |
+| **Condition** | A single condition with types: `crossover`, `crossunder`, `comparison`, `range`, `and`, `or` |
+| **IndicatorRef** | Reference to a technical indicator with name (`sma`, `ema`, `rsi`, `macd`, `bollinger`, `atr`, `stochastic`, `obv`, `vwap`, `volume`, `price`) and params (`period`, `source`, `stddev`) |
+| **PositionSizing** | Method (`risk_percent`, `fixed_quantity`, `percent_equity`) and value |
+| **StopLoss** | Method (`atr_multiple`, `fixed_percent`, `price_level`) with configurable params |
+| **TakeProfit** | Method (`risk_reward_ratio`, `fixed_percent`, `price_level`) with configurable params |
 
-Backtest logic in all three follows the same pattern: compute signals → `ffill()` positions → `shift(1)` to avoid lookahead → compute daily returns → cumulative product → derive Sharpe, max drawdown, win rate, total trades.
+**Engine Components** (defined in `engine.py`)
+
+| Component | Purpose |
+| :--- | :--- |
+| **IndicatorCalculator** | Computes any of 10+ technical indicators from OHLCV data |
+| **ConditionEvaluator** | Evaluates conditions against a data row, supporting boolean logic (and/or nesting) |
+| **StrategyEngine** | Main class — initializes from `StrategyConfig`, generates entry/exit signals, runs full backtests |
+
+**How it works**
+
+1. A `StrategyConfig` is created (via AI extraction, manual config, or preset).
+2. `StrategyEngine(config)` precomputes all needed indicators from market data using `IndicatorCalculator`.
+3. For each row of data, `ConditionEvaluator` checks entry conditions (all must be true to enter a position) and exit conditions (all must be true to exit).
+4. Stop loss logic is evaluated on each bar while in a position — supports ATR-based, fixed percent, and price level methods.
+5. Position sizing converts the configured method/values into actual quantities.
+6. Backtest results include total return, Sharpe ratio, max drawdown, win rate, profit factor, and equity curve.
 
 #### `extractor/` — AI Strategy Extraction
 
-- **`llm_client.py`** — Checks if `ANTHROPIC_API_KEY` is set → uses `AsyncAnthropic` (claude-3-5-haiku), otherwise falls back to `AsyncOpenAI` (gpt-4o-mini). Builds a prompt asking the LLM to parse the trading idea into structured JSON. Strips code fences from the response and calls `json.loads()`.
-- **`parser.py`** — Maps raw dict to `ExtractResponse` Pydantic model.
+- **`llm_client.py`** — Checks if `ANTHROPIC_API_KEY` is set → uses `AsyncAnthropic` (claude-3-5-haiku), otherwise falls back to `AsyncOpenAI` (gpt-4o-mini). Builds a prompt asking the LLM to parse the trading idea into JSON matching `StrategyConfig`. Strips code fences from the response and calls `json.loads()`.
+- **`parser.py`** — Maps raw dict to `StrategyConfig` Pydantic model.
 - **`pdf_extractor.py`** — Uses PyMuPDF (`fitz`) to extract text from PDF bytes.
 - **`youtube_extractor.py`** — Uses `youtube-transcript-api` to fetch transcript by video ID extracted from URL.
 
 #### `optimizer/` — Hyperparameter Tuning
 
-- **`search_space.py`** — Maps strategy names to Optuna parameter spaces (int/float ranges for each tunable parameter).
+- **`search_space.py`** — Maps strategy names to Optuna parameter spaces (int/float ranges for each tunable parameter like indicator periods, condition thresholds).
+
 - **`optimizer.py`** — `run_optimization(strategy_name, symbol, n_trials=240)`:
   1. Fetches 5 years of historical data via `datafeed.fetch_historical_data`
   2. Creates an Optuna study with `TPESampler`, direction = maximize
