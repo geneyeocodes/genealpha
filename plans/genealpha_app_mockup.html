@@ -1,0 +1,295 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d0f14;--bg2:#141720;--bg3:#1c2030;--bg4:#232840;
+    --border:#2a3050;--border2:#3a4570;
+    --text:#e2e8f0;--text2:#8892b0;--text3:#556080;
+    --green:#22d3a5;--green2:#0f4a37;--greenT:#22d3a518;
+    --red:#ff5a5a;--red2:#4a0f0f;--redT:#ff5a5a18;
+    --blue:#4e9eff;--blue2:#0f2a4a;--blueT:#4e9eff18;
+    --amber:#f5a623;--amber2:#3a2a0f;--amberT:#f5a62318;
+    --purple:#a78bfa;--purpleT:#a78bfa18;
+    --font:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;
+    --r:8px;--r2:12px;
+  }
+  .app{font-family:var(--font);background:var(--bg);color:var(--text);min-height:600px;display:flex;flex-direction:column}
+  /* NAV */
+  .nav{display:flex;align-items:center;gap:0;border-bottom:1px solid var(--border);background:var(--bg2);padding:0 16px}
+  .nav-brand{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--green);letter-spacing:.05em;padding:12px 16px 12px 0;border-right:1px solid var(--border);margin-right:8px}
+  .nav-tab{font-size:12px;font-weight:500;color:var(--text2);padding:12px 14px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}
+  .nav-tab:hover{color:var(--text)}
+  .nav-tab.active{color:var(--green);border-bottom-color:var(--green)}
+  .nav-status{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);font-family:var(--mono)}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  /* PAGES */
+  .page{display:none;padding:16px;flex:1}
+  .page.active{display:block}
+  /* DASHBOARD */
+  .metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+  .metric-label{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+  .metric-val{font-family:var(--mono);font-size:20px;font-weight:600}
+  .metric-sub{font-size:10px;color:var(--text3);margin-top:2px}
+  .green{color:var(--green)}.red{color:var(--red)}.blue{color:var(--blue)}.amber{color:var(--amber)}.purple{color:var(--purple)}
+  /* BOT TABLE */
+  .section-title{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+  .bot-table{width:100%;border-collapse:collapse;font-size:12px}
+  .bot-table th{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)}
+  .bot-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-family:var(--mono)}
+  .bot-table tr:last-child td{border-bottom:none}
+  .bot-table tr:hover td{background:var(--bg3)}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500;padding:2px 8px;border-radius:20px}
+  .badge.run{background:var(--greenT);color:var(--green);border:1px solid var(--green2)}
+  .badge.stop{background:var(--redT);color:var(--red);border:1px solid var(--red2)}
+  .badge.opt{background:var(--amberT);color:var(--amber);border:1px solid var(--amber2)}
+  .badge.test{background:var(--blueT);color:var(--blue);border:1px solid var(--blue2)}
+  .badge.dot-inner::before{content:'';width:4px;height:4px;border-radius:50%;background:currentColor;display:inline-block}
+  .btn{font-family:var(--font);font-size:11px;font-weight:500;cursor:pointer;border-radius:var(--r);padding:5px 12px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);transition:all .15s}
+  .btn:hover{border-color:var(--text2);color:var(--text)}
+  .btn.primary{background:var(--greenT);border-color:var(--green);color:var(--green)}
+  .btn.primary:hover{background:var(--green2)}
+  .btn.danger{background:var(--redT);border-color:var(--red);color:var(--red)}
+  .sparkline{height:24px;opacity:.8}
+  /* IDEA PAGE */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px}
+  .card-title{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+  .input-area{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;font-family:var(--font);font-size:12px;color:var(--text);resize:none;outline:none;transition:border .15s}
+  .input-area:focus{border-color:var(--border2)}
+  .upload-zone{border:1px dashed var(--border2);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:all .15s;margin:8px 0}
+  .upload-zone:hover{border-color:var(--blue);background:var(--blueT)}
+  .upload-zone-text{font-size:11px;color:var(--text3)}
+  .tabs-mini{display:flex;gap:4px;margin-bottom:10px}
+  .tab-mini{font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--r);cursor:pointer;border:1px solid transparent;color:var(--text2)}
+  .tab-mini.active{background:var(--blueT);border-color:var(--blue);color:var(--blue)}
+  .strategy-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:11px;line-height:1.6;color:var(--text2)}
+  .strategy-box .highlight{color:var(--green);font-weight:500}
+  .strategy-box .param{color:var(--amber)}
+  .backtest-chart{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-top:8px}
+  /* OPTIMIZE */
+  .param-row{display:grid;grid-template-columns:140px 1fr 60px 60px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+  .param-row:last-child{border-bottom:none}
+  .param-name{font-family:var(--mono);font-size:11px;color:var(--text2)}
+  .range-input{width:100%;accent-color:var(--blue);cursor:pointer}
+  .param-val{font-family:var(--mono);font-size:11px;color:var(--amber);text-align:center}
+  .results-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px}
+  .results-table th{font-size:10px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)}
+  .results-table td{padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono)}
+  .results-table tr.best td{background:var(--greenT)}
+  /* DEPLOY */
+  .deploy-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field-group{margin-bottom:12px}
+  .field-label{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+  .field-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;transition:border .15s}
+  .field-input:focus{border-color:var(--blue)}
+  .field-select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none}
+  .deploy-confirm{background:var(--greenT);border:1px solid var(--green);border-radius:var(--r2);padding:14px;display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+  .deploy-summary{font-size:11px;color:var(--text2);line-height:1.7}
+  .deploy-summary strong{color:var(--text)}
+</style>
+
+<div class="app">
+  <nav class="nav">
+    <div class="nav-brand">⬡ GENEALPHA</div>
+    <div class="nav-tab active" onclick="showPage('dashboard',this)">Dashboard</div>
+    <div class="nav-tab" onclick="showPage('idea',this)">Idea</div>
+    <div class="nav-tab" onclick="showPage('optimize',this)">Optimize</div>
+    <div class="nav-tab" onclick="showPage('deploy',this)">Deploy</div>
+    <div class="nav-status"><div class="dot"></div>IBKR CONNECTED · PAPER</div>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard" class="page active">
+    <div class="metrics-row">
+      <div class="metric"><div class="metric-label">Total P&L Today</div><div class="metric-val green">+$1,847</div><div class="metric-sub">↑ 3 bots profitable</div></div>
+      <div class="metric"><div class="metric-label">Active Bots</div><div class="metric-val blue">4</div><div class="metric-sub">2 paper · 2 live</div></div>
+      <div class="metric"><div class="metric-label">Open Positions</div><div class="metric-val amber">11</div><div class="metric-sub">Across 6 symbols</div></div>
+      <div class="metric"><div class="metric-label">Drawdown</div><div class="metric-val red">-2.1%</div><div class="metric-sub">Max allowed: 5%</div></div>
+    </div>
+    <div class="section-title">Running Bots</div>
+    <table class="bot-table">
+      <thead><tr>
+        <th>Bot Name</th><th>Strategy</th><th>Symbol</th><th>Status</th>
+        <th>Return</th><th>Sharpe</th><th>Drawdown</th><th>7d</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--text);font-weight:500">MomentumBot-01</td>
+          <td style="color:var(--text2)">EMA Crossover</td><td>AAPL</td>
+          <td><span class="badge run dot-inner">Running</span></td>
+          <td class="green">+8.4%</td><td>1.82</td><td class="red">-1.2%</td>
+          <td><svg class="sparkline" viewBox="0 0 60 24"><polyline points="0,18 10,14 20,16 30,8 40,10 50,5 60,4" fill="none" stroke="#22d3a5" stroke-width="1.5"/></svg></td>
+          <td><button class="btn danger" style="font-size:10px;padding:3px 8px">Stop</button></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text);font-weight:500">MeanRev-SPY</td>
+          <td style="color:var(--text2)">RSI Reversion</td><td>SPY</td>
+          <td><span class="badge run dot-inner">Running</span></td>
+          <td class="green">+3.1%</td><td>1.41</td><td class="red">-0.8%</td>
+          <td><svg class="sparkline" viewBox="0 0 60 24"><polyline points="0,12 10,16 20,10 30,14 40,9 50,11 60,8" fill="none" stroke="#22d3a5" stroke-width="1.5"/></svg></td>
+          <td><button class="btn danger" style="font-size:10px;padding:3px 8px">Stop</button></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text);font-weight:500">VolBreak-QQQ</td>
+          <td style="color:var(--text2)">Volatility Breakout</td><td>QQQ</td>
+          <td><span class="badge opt dot-inner">Optimizing</span></td>
+          <td class="red">-1.2%</td><td>0.88</td><td class="red">-3.1%</td>
+          <td><svg class="sparkline" viewBox="0 0 60 24"><polyline points="0,8 10,10 20,14 30,18 40,16 50,20 60,19" fill="none" stroke="#ff5a5a" stroke-width="1.5"/></svg></td>
+          <td><button class="btn" style="font-size:10px;padding:3px 8px">View</button></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text);font-weight:500">PairsTrade-v2</td>
+          <td style="color:var(--text2)">Statistical Arb</td><td>GLD/SLV</td>
+          <td><span class="badge test dot-inner">Backtesting</span></td>
+          <td class="amber">+0.3%</td><td>1.05</td><td class="red">-0.5%</td>
+          <td><svg class="sparkline" viewBox="0 0 60 24"><polyline points="0,12 10,11 20,13 30,11 40,12 50,10 60,11" fill="none" stroke="#f5a623" stroke-width="1.5"/></svg></td>
+          <td><button class="btn" style="font-size:10px;padding:3px 8px">View</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- IDEA PAGE -->
+  <div id="page-idea" class="page">
+    <div class="two-col" style="align-items:start">
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title">Input Source</div>
+          <div class="tabs-mini">
+            <div class="tab-mini active">Text</div>
+            <div class="tab-mini">YouTube</div>
+            <div class="tab-mini">PDF / Doc</div>
+            <div class="tab-mini">Code</div>
+          </div>
+          <textarea class="input-area" rows="5" placeholder="Describe your trading idea...&#10;&#10;e.g. Buy when 20-day EMA crosses above 50-day EMA with RSI confirmation above 50. Exit when price drops below 20-day EMA or RSI falls below 40..."></textarea>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn primary" onclick="sendPrompt('How does the AI extract a strategy from a text description?')">Extract Strategy ↗</button>
+            <button class="btn">Clear</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Extracted Strategy</div>
+          <div class="strategy-box">
+            <div><span class="highlight">Strategy:</span> EMA Crossover with RSI Filter</div>
+            <div style="margin-top:6px"><span class="highlight">Entry:</span> EMA(<span class="param">20</span>) crosses EMA(<span class="param">50</span>) ↑ AND RSI(<span class="param">14</span>) > <span class="param">50</span></div>
+            <div><span class="highlight">Exit:</span> Price &lt; EMA(<span class="param">20</span>) OR RSI &lt; <span class="param">40</span></div>
+            <div><span class="highlight">Position size:</span> <span class="param">2%</span> risk per trade</div>
+            <div><span class="highlight">Stop loss:</span> <span class="param">1.5×</span> ATR below entry</div>
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:8px">
+              <button class="btn primary" onclick="sendPrompt('How does backtesting work in this system?')">Run Backtest ↗</button>
+              <button class="btn" onclick="showPage('optimize',document.querySelectorAll('.nav-tab')[2])">Optimize →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="card-title">Backtest Results — 2020–2024</div>
+          <div class="metrics-row" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div class="metric"><div class="metric-label">Total Return</div><div class="metric-val green" style="font-size:16px">+47.3%</div></div>
+            <div class="metric"><div class="metric-label">Sharpe Ratio</div><div class="metric-val blue" style="font-size:16px">1.74</div></div>
+            <div class="metric"><div class="metric-label">Max Drawdown</div><div class="metric-val red" style="font-size:16px">-12.4%</div></div>
+            <div class="metric"><div class="metric-label">Win Rate</div><div class="metric-val amber" style="font-size:16px">58.3%</div></div>
+          </div>
+          <div class="backtest-chart">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">EQUITY CURVE</div>
+            <svg width="100%" viewBox="0 0 320 80">
+              <defs><linearGradient id="eq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#22d3a5" stop-opacity=".25"/><stop offset="100%" stop-color="#22d3a5" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,70 C20,65 40,60 60,50 S90,30 110,28 S140,35 160,20 S190,15 210,10 S240,18 260,8 S290,5 320,4 L320,80 L0,80Z" fill="url(#eq)"/>
+              <path d="M0,70 C20,65 40,60 60,50 S90,30 110,28 S140,35 160,20 S190,15 210,10 S240,18 260,8 S290,5 320,4" fill="none" stroke="#22d3a5" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:var(--text3);font-family:var(--mono)">
+            <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Total Trades</span><span style="color:var(--text)">182</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Avg Hold (days)</span><span style="color:var(--text)">4.2</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Profit Factor</span><span style="color:var(--green)">1.83</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPTIMIZE PAGE -->
+  <div id="page-optimize" class="page">
+    <div class="two-col" style="align-items:start">
+      <div class="card">
+        <div class="card-title">Parameter Ranges</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Strategy: EMA Crossover with RSI Filter · AAPL</div>
+        <div class="param-row"><span class="param-name">fast_ema</span><input type="range" class="range-input" min="5" max="30" value="20" oninput="this.nextElementSibling.textContent=this.value"><span class="param-val">20</span><span style="font-size:10px;color:var(--text3)">5–30</span></div>
+        <div class="param-row"><span class="param-name">slow_ema</span><input type="range" class="range-input" min="30" max="100" value="50" oninput="this.nextElementSibling.textContent=this.value"><span class="param-val">50</span><span style="font-size:10px;color:var(--text3)">30–100</span></div>
+        <div class="param-row"><span class="param-name">rsi_period</span><input type="range" class="range-input" min="7" max="21" value="14" oninput="this.nextElementSibling.textContent=this.value"><span class="param-val">14</span><span style="font-size:10px;color:var(--text3)">7–21</span></div>
+        <div class="param-row"><span class="param-name">rsi_entry</span><input type="range" class="range-input" min="45" max="65" value="50" oninput="this.nextElementSibling.textContent=this.value"><span class="param-val">50</span><span style="font-size:10px;color:var(--text3)">45–65</span></div>
+        <div class="param-row"><span class="param-name">atr_mult</span><input type="range" class="range-input" min="10" max="30" value="15" oninput="this.nextElementSibling.textContent=(this.value/10).toFixed(1)"><span class="param-val">1.5</span><span style="font-size:10px;color:var(--text3)">1.0–3.0</span></div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn primary" onclick="sendPrompt('How does Optuna optimize strategy parameters?')">Run Optimization ↗</button>
+          <span style="font-size:10px;color:var(--text3)">~240 trials · est. 4 min</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Optimization Results</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <span class="badge" style="background:var(--greenT);color:var(--green);border:1px solid var(--green2)">240 trials</span>
+          <span class="badge" style="background:var(--blueT);color:var(--blue);border:1px solid var(--blue2)">Optuna TPE</span>
+          <span class="badge" style="background:var(--purpleT);color:var(--purple);border:1px solid #4a3a8a">Best: Sharpe 2.11</span>
+        </div>
+        <table class="results-table">
+          <thead><tr><th>#</th><th>fast</th><th>slow</th><th>rsi</th><th>Sharpe</th><th>Return</th><th>DD</th><th></th></tr></thead>
+          <tbody>
+            <tr class="best"><td>1</td><td>12</td><td>45</td><td>16</td><td class="green">2.11</td><td class="green">+61%</td><td class="red">-9.8%</td><td><button class="btn primary" style="font-size:10px;padding:2px 8px" onclick="showPage('deploy',document.querySelectorAll('.nav-tab')[3])">Deploy→</button></td></tr>
+            <tr><td>2</td><td>10</td><td>42</td><td>14</td><td class="green">1.98</td><td class="green">+57%</td><td class="red">-10.2%</td><td><button class="btn" style="font-size:10px;padding:2px 8px">Deploy</button></td></tr>
+            <tr><td>3</td><td>15</td><td>50</td><td>14</td><td class="green">1.88</td><td class="green">+54%</td><td class="red">-11.1%</td><td><button class="btn" style="font-size:10px;padding:2px 8px">Deploy</button></td></tr>
+            <tr><td>4</td><td>18</td><td>55</td><td>16</td><td class="amber">1.74</td><td class="green">+49%</td><td class="red">-12.4%</td><td><button class="btn" style="font-size:10px;padding:2px 8px">Deploy</button></td></tr>
+            <tr><td>5</td><td>20</td><td>60</td><td>12</td><td class="amber">1.65</td><td class="green">+44%</td><td class="red">-13.8%</td><td><button class="btn" style="font-size:10px;padding:2px 8px">Deploy</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPLOY PAGE -->
+  <div id="page-deploy" class="page">
+    <div class="deploy-grid">
+      <div class="card">
+        <div class="card-title">Bot Configuration</div>
+        <div class="field-group"><div class="field-label">Bot Name</div><input class="field-input" value="MomentumBot-EMA-v3" type="text"/></div>
+        <div class="field-group"><div class="field-label">Symbol</div><input class="field-input" value="AAPL" type="text"/></div>
+        <div class="field-group"><div class="field-label">Account Mode</div>
+          <select class="field-select"><option>Paper Trading</option><option>Live Trading</option></select></div>
+        <div class="field-group"><div class="field-label">Order Type</div>
+          <select class="field-select"><option>Market</option><option>Limit</option><option>MOC</option></select></div>
+        <div class="field-group"><div class="field-label">Max Position Size ($)</div><input class="field-input" value="5000" type="text"/></div>
+        <div class="field-group"><div class="field-label">Max Daily Loss ($)</div><input class="field-input" value="200" type="text"/></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Strategy Parameters (optimized)</div>
+        <div class="field-group"><div class="field-label">fast_ema</div><input class="field-input" value="12" type="text"/></div>
+        <div class="field-group"><div class="field-label">slow_ema</div><input class="field-input" value="45" type="text"/></div>
+        <div class="field-group"><div class="field-label">rsi_period</div><input class="field-input" value="16" type="text"/></div>
+        <div class="field-group"><div class="field-label">rsi_entry_threshold</div><input class="field-input" value="50" type="text"/></div>
+        <div class="field-group"><div class="field-label">atr_multiplier</div><input class="field-input" value="1.5" type="text"/></div>
+        <div class="field-group"><div class="field-label">Schedule (cron)</div><input class="field-input" value="0 9 * * 1-5" type="text"/></div>
+      </div>
+    </div>
+    <div class="deploy-confirm">
+      <div class="deploy-summary">
+        <strong>MomentumBot-EMA-v3</strong> · AAPL · Paper · Market orders<br>
+        Max position $5,000 · Daily stop $200 · Sharpe 2.11 in backtest
+      </div>
+      <button class="btn primary" style="font-size:12px;padding:8px 20px" onclick="sendPrompt('What happens after a bot is deployed to IBKR?')">
+        🚀 Deploy Bot ↗
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showPage(id, tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if(tab) tab.classList.add('active');
+}
+</script>

@@ -1,0 +1,5 @@
+backend/.env
+backend/genealpha.db
+backend/__pycache__
+.vscode/
+frontend/node_modules/

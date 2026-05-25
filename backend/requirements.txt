@@ -1,0 +1,32 @@
+# Core
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+httpx
+
+# Database
+sqlalchemy[asyncio]
+aiosqlite
+
+# Quantitative analysis
+numpy
+pandas
+scipy
+yfinance
+ib-insync
+optuna
+
+# AI & extraction
+anthropic
+openai
+pymupdf
+
+# Development
+python-dotenv
+pytest
+black
+
+# pip-only
+vectorbt
+youtube-transcript-api

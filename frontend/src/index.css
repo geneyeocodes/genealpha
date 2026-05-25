@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-900: #0d0f14;
+  --color-dark-850: #11131a;
+  --color-dark-800: #141720;
+  --color-dark-750: #181c2a;
+  --color-dark-700: #1c2030;
+  --color-dark-600: #2a3050;
+  --color-accent: #22d3a5;
+  --color-accent-dim: #0f4a37;
+  --color-blue: #4e9eff;
+  --color-amber: #f5a623;
+  --color-red: #ff5a5a;
+  --color-purple: #a78bfa;
+  --color-muted: #556080;
+  --color-text: #e2e8f0;
+  --color-text-dim: #8892b0;
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Base ── */
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--color-dark-900);
+  color: var(--color-text);
+}
+
+/* ── Animated Dot Grid ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, #22d3a510 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+  animation: grid-drift 40s linear infinite;
+}
+
+@keyframes grid-drift {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(16px, 8px); }
+  100% { transform: translate(0, 0); }
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-dark-600);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* ── Selection ── */
+::selection {
+  background: #22d3a540;
+  color: var(--color-text);
+}
+
+/* ── Font Helpers ── */
+code, .mono, [class*="font-mono"] {
+  font-family: var(--font-mono);
+}
+
+/* ── Keyframes ── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+  50% { opacity: 0.5; box-shadow: 0 0 8px currentColor; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes count-up {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-breathe { animation: breathe 2s ease-in-out infinite; }
+.animate-fade-in-up { animation: fade-in-up 0.4s ease-out both; }
+.animate-shimmer {
+  background: linear-gradient(90deg, #1c2030 25%, #2a3050 50%, #1c2030 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Enhanced Range Slider ── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #2a3050 var(--pct, 0%), #2a3050 100%);
+  cursor: pointer;
+  transition: background 0.15s;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #4e9eff, #3a7bd5);
+  border: 2px solid var(--color-dark-700);
+  box-shadow: 0 0 8px #4e9eff60, 0 2px 4px #00000060;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 12px #4e9eff90, 0 2px 4px #00000060;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #4e9eff, #3a7bd5);
+  border: 2px solid var(--color-dark-700);
+  cursor: pointer;
+}
+
+/* ── Animations for page transitions ── */
+.page-enter {
+  animation: fade-in-up 0.35s ease-out both;
+}
+
+/* ── Skeleton loading ── */
+.skeleton {
+  background: linear-gradient(90deg, #1c2030 25%, #2a3050 50%, #1c2030 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+/* ── Sparkline container ── */
+.sparkline {
+  height: 24px;
+  opacity: 0.8;
+}

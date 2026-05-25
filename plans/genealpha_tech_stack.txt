@@ -1,0 +1,98 @@
+===============================================================================
+GENEALPHA SYSTEM ARCHITECTURE & TECHNICAL SPECIFICATION
+===============================================================================
+
+1. SYSTEM OVERVIEW
+------------------
+GeneAlpha is an algorithmic trading, backtesting, and automated deployment 
+platform. The system ingests natural language trading ideas (via text, PDFs, 
+or YouTube transcripts), parses them into structured trading configurations using 
+Large Language Models (LLMs), runs high-performance backtests and hyperparameter 
+optimizations, and deploys production-ready trading bots executing via Interactive 
+Brokers (IBKR).
+
+2. CORE ENVIRONMENT & PACKAGE MANAGEMENT
+---------------------------------------------
+* Environment Manager: Conda (Miniconda / Anaconda)
+  - Used for cross-platform dependency management, isolated environments, and 
+    handling heavy C-extensions required by quantitative libraries (e.g., NumPy, 
+    Pandas, VectorBT).
+  - Maintained via a root `environment.yml` configuration file.
+
+3. RECOMMENDED TECHNOLOGICAL STACK
+----------------------------------
+* Frontend Architecture:
+  - Framework: React (TypeScript)
+  - Styling: Tailwind CSS
+  - Core Views: Modular dashboard components for real-time P&L tracking, 
+    strategy creation, optimization execution, and deployment.
+
+* Backend & API Layer:
+  - Framework: FastAPI (Python)
+  - Core Features: Asynchronous endpoint handling, automatic OpenAPI documentation, 
+    and native WebSocket support for streaming live bot states.
+
+* Asynchronous Task Architecture:
+  - Task Queue: Celery
+  - Message Broker & Cache: Redis
+  - Purpose: Offloads heavy computation (historical backtests, multi-variable 
+    parameter optimizations) and long-lived trading execution loops away from the 
+    primary API processes to prevent blocking.
+
+* Data Persistence & Infrastructure:
+  - Database: PostgreSQL (Handles persistent relational storage: bot metadata, 
+    strategy configurations, historical backtest logs, executed trade records).
+  - Pub/Sub Layer: Redis (Utilized for real-time state streaming to the frontend via 
+    WebSockets).
+
+* Quantitative & Broker Integration:
+  - Broker Connectivity: ib_insync (Clean, asyncio-based Python wrapper around 
+    Interactive Brokers TWS / IB Gateway).
+  - Market Data Feeds: yfinance (Free; utilized for EOD/daily bars) and 
+    Polygon.io (Premium/Enterprise; high-quality intraday bars).
+  - Backtesting Engine: vectorbt or backtrader (Provides ultra-fast vectorized or 
+    event-driven backtesting execution).
+  - Strategy Optimization: Optuna (Implements Bayesian Tree-structured Parzen 
+    Estimator (TPE) search; significantly faster and more resource-efficient than standard grid search).
+
+* AI Knowledge & Extraction Layer:
+  - Inference APIs: Claude (Anthropic) or OpenAI API
+  - Parsing Modules: PyMuPDF (PDF ingestion), youtube-transcript-api (YouTube URL processing)
+  - Purpose: Translates unstructured narrative inputs into machine-readable strategy configurations.
+
+* Containerization & DevOps:
+  - Toolchain: Docker Compose
+  - Execution: Orchestrates the React frontend dev server, FastAPI backend, Celery workers, 
+    PostgreSQL, and Redis instances locally via a single consolidated pipeline.
+
+4. SYSTEM DIRECTORY TREE
+------------------------
+genealpha/
+├── environment.yml         # Conda environment definition for package dependency isolation
+├── docker-compose.yml      # Multi-container orchestration specification
+├── frontend/               # Single-Page Application codebase
+│   └── src/pages/          # Dashboard, Idea, Optimize, Deploy
+└── backend/                # Primary core computational backend
+    ├── api/                # FastAPI endpoint routers (bots, strategies, backtest, optimize)
+    ├── core/               # Bot runtime lifecycle manager, IBKR connector, data feed ingestors
+    ├── strategies/         # Strategy interface base class + concrete implementations
+    ├── optimizer/          # Optuna framework wrappers and search spaces
+    ├── extractor/          # LLM-based narrative text-to-strategy configuration engine
+    └── tasks/              # Celery task definitions (backtest, optimize, live loops)
+
+5. ARCHITECTURAL INJUNCTIONS & PARADIGMS
+----------------------------------------
+* Decoupled Execution Loops:
+  The live trading execution loops must run strictly inside long-lived standalone 
+  Celery workers (or managed asynchronous event loops) completely segregated from 
+  the FastAPI HTTP thread pool. 
+  
+* Real-Time Dashboard Synchronization:
+  Live engine metrics, active portfolio P&L, and position state updates must be 
+  broadcast via Redis Pub/Sub through FastAPI WebSockets straight to the client UI.
+
+* Unified Strategy Paradigm:
+  The strategy interface must inherit from a standardized base class. This ensures 
+  the exact same signal generation logic is executed seamlessly across both historical 
+  backtesting simulation suites and live execution broker networks ("Write once, deploy anywhere").
+===============================================================================
