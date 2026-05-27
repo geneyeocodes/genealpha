@@ -76,16 +76,26 @@ export default function Idea() {
     setBacktesting(true);
     setBacktestError(null);
 
+    // Compute dynamic 20-year range from today
+    const endDate = new Date().toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 20 * 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
     try {
       const res = await fetch(`${apiBase}/strategies/backtest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          config: { ...strategyConfig, symbol: "SPY" },
+          config: strategyConfig,
+          symbol: "SPY",
+          start_date: startDate,
+          end_date: endDate,
           initial_capital: 10000,
         }),
       });
-      if (!res.ok) throw new Error("Backtest failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Backtest failed");
+      }
       const result: BacktestResult = await res.json();
       setBacktestResult(result);
     } catch (e) {

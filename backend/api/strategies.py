@@ -1,49 +1,70 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from ..strategies import StrategyConfig, StrategyEngine
+from ..core.datafeed import fetch_historical_data
 
 router = APIRouter()
 
 
 class BacktestRequest(BaseModel):
     config: dict
+    symbol: str = "SPY"
+    start_date: str = "2020-01-01"
+    end_date: str = "2025-01-01"
     initial_capital: float = 10000.0
 
 
 class BacktestResponse(BaseModel):
-    total_return_pct: float
+    """Field names match what the frontend BacktestResult type expects."""
+
+    total_return: float
     sharpe_ratio: float
-    max_drawdown_pct: float
-    win_rate_pct: float
+    max_drawdown: float
+    win_rate: float
     total_trades: int
-    avg_hold_periods: float
-    profit_factor: float | None
+    avg_hold_days: float
+    profit_factor: Optional[float] = None
     final_capital: float
-    equity_curve: list
+    equity_curve: list[float]
     trades: list
 
 
-@router.post("/backtest")
+@router.post("/backtest", response_model=BacktestResponse)
 async def run_backtest(req: BacktestRequest):
     """Run a backtest for a strategy config against historical data."""
     try:
+        # Validate config (extra keys like 'symbol' are ignored)
         config = StrategyConfig(**req.config)
         engine = StrategyEngine(config)
 
-        # Fetch historical data (placeholder — real impl would pull from datafeed)
-        import pandas as pd
-        import yfinance as yf
+        # Fetch historical data
+        df = fetch_historical_data(req.symbol, req.start_date, req.end_date)
+        if df is None or df.empty:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No historical data for {req.symbol} " f"({req.start_date} to {req.end_date})",
+            )
 
-        symbol = req.config.get("symbol", "SPY")
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="5y")
-        if hist.empty:
-            raise HTTPException(status_code=400, detail=f"No historical data for {symbol}")
+        result = engine.backtest(df, req.initial_capital)
 
-        hist.columns = [c.lower() for c in hist.columns]
-        result = engine.backtest(hist, req.initial_capital)
-        return result
+        # Map engine result fields to frontend-expected field names
+        # and flatten equity_curve to a list of numbers
+        return BacktestResponse(
+            total_return=result.get("total_return_pct", 0),
+            sharpe_ratio=result.get("sharpe_ratio", 0),
+            max_drawdown=result.get("max_drawdown_pct", 0),
+            win_rate=result.get("win_rate_pct", 0),
+            total_trades=result.get("total_trades", 0),
+            avg_hold_days=result.get("avg_hold_periods", 0),
+            profit_factor=result.get("profit_factor"),
+            final_capital=result.get("final_capital", 0),
+            equity_curve=[e["equity"] for e in (result.get("equity_curve") or [])],
+            trades=result.get("trades", []),
+        )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

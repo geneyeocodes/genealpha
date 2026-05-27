@@ -25,17 +25,25 @@ export interface Trade {
 }
 
 export interface BacktestResult {
-  id: string;
-  bot_id: string;
   total_return: number;
   sharpe_ratio: number;
   max_drawdown: number;
   win_rate: number;
   total_trades: number;
   avg_hold_days: number;
-  profit_factor: number;
+  profit_factor: number | null;
   equity_curve: number[];
-  created_at: string;
+  final_capital?: number;
+  trades?: Array<{
+    entry_price: number;
+    exit_price: number;
+    pnl: number;
+  }>;
+
+  // DB-persisted fields (only present when reading from /backtest/ endpoint)
+  id?: string;
+  bot_id?: string;
+  created_at?: string;
 }
 
 export interface OptimizationResult {

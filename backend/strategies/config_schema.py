@@ -65,3 +65,5 @@ class StrategyConfig(BaseModel):
     stop_loss: StopLoss = Field(default_factory=StopLoss)
     take_profit: Optional[TakeProfit] = None
     timeframe: str = "1d"
+
+    model_config = {"extra": "ignore"}
