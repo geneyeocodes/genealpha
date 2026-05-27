@@ -50,13 +50,43 @@ export interface OptimizationResult {
   created_at: string;
 }
 
-export interface ExtractedStrategy {
-  strategy_name: string;
-  entry_conditions: string;
-  exit_conditions: string;
-  position_sizing: string;
-  stop_loss: string;
-  parameters: Record<string, number>;
+export interface StrategyConfig {
+  name: string;
+  entry_conditions: Condition[];
+  exit_conditions: Condition[];
+  position_sizing: { method: string; value: number };
+  stop_loss: { method: string; params: Record<string, unknown> };
+  take_profit?: { method: string; params: Record<string, unknown> } | null;
+  timeframe: string;
+}
+
+export interface Condition {
+  type: "crossover" | "crossunder" | "comparison" | "range" | "and" | "or";
+  indicator?: IndicatorRef | null;
+  crosses_above?: IndicatorRef | null;
+  crosses_below?: IndicatorRef | null;
+  source?: string | null;
+  operator?: string | null;
+  value?: number | null;
+  min?: number | null;
+  max?: number | null;
+  conditions?: Condition[] | null;
+}
+
+export interface IndicatorRef {
+  name: string;
+  params: {
+    period?: number;
+    source?: string;
+    stddev?: number;
+  };
+}
+
+/** Response from POST /api/v1/extract */
+export interface ExtractResponse {
+  strategy: StrategyConfig;
+  source_type: string;
+  raw_excerpt: string | null;
 }
 
 export type PageTab = "dashboard" | "idea" | "optimize" | "deploy";

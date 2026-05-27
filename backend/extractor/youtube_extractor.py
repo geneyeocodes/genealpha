@@ -16,5 +16,6 @@ def extract_video_id(url: str) -> str:
 
 def get_transcript(url: str, language: str = "en") -> str:
     video_id = extract_video_id(url)
-    transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[language])
-    return " ".join([entry["text"] for entry in transcript])
+    api = YouTubeTranscriptApi()
+    transcript = api.fetch(video_id, languages=[language])
+    return " ".join([entry.text for entry in transcript])

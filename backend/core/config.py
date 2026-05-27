@@ -1,19 +1,22 @@
+from pathlib import Path
+from pydantic import Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite+aiosqlite:///./backend/genealpha.db"
+    database_url: str = Field(default="")
+    ibkr_host: str = Field(default="")
+    ibkr_port: int = Field(default=0)
+    anthropic_api_key: str = Field(default="")
+    openai_api_key: str = Field(default="")
+    polygon_api_key: str = Field(default="")
 
-    # IBKR
-    ibkr_host: str = "127.0.0.1"
-    ibkr_port: int = 7497
-
-    # AI providers
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
-
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": Path(__file__).resolve().parent.parent / ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
 
 @lru_cache

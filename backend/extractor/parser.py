@@ -1,12 +1,8 @@
-from ..core.schemas import ExtractResponse
+from ..core.schemas import ExtractResponse, StrategyConfig
 
 
-def parse_extracted_strategy(raw: dict) -> ExtractResponse:
-    return ExtractResponse(
-        strategy_name=raw.get("strategy_name", "custom"),
-        entry_conditions=raw.get("entry_conditions", ""),
-        exit_conditions=raw.get("exit_conditions", ""),
-        position_sizing=raw.get("position_sizing", ""),
-        stop_loss=raw.get("stop_loss", ""),
-        parameters=raw.get("parameters", {}),
-    )
+async def parse_extracted_strategy(
+    raw: dict, source_type: str = "text", raw_excerpt: str | None = None
+) -> ExtractResponse:
+    config = StrategyConfig(**raw)  # validates the LLM output
+    return ExtractResponse(strategy=config, source_type=source_type, raw_excerpt=raw_excerpt)

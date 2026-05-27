@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any
 from datetime import datetime
+from backend.strategies.config_schema import StrategyConfig
 
 
 class BotCreate(BaseModel):
@@ -103,9 +104,6 @@ class ExtractRequest(BaseModel):
 
 
 class ExtractResponse(BaseModel):
-    strategy_name: str
-    entry_conditions: str
-    exit_conditions: str
-    position_sizing: str
-    stop_loss: str
-    parameters: dict
+    strategy: StrategyConfig
+    source_type: str = "text"
+    raw_excerpt: Optional[str] = None  # first 200 chars of the source, for frontend display
