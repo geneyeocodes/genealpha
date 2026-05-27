@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     database_url: str = Field(default="")
     ibkr_host: str = Field(default="")
     ibkr_port: int = Field(default=0)
-    anthropic_api_key: str = Field(default="")
-    openai_api_key: str = Field(default="")
     polygon_api_key: str = Field(default="")
 
     model_config = {

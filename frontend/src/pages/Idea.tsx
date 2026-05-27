@@ -1,72 +1,71 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import type { StrategyConfig, ExtractResponse, BacktestResult } from "../types";
 
-type InputSource = "text" | "youtube" | "pdf" | "code";
-
 export default function Idea() {
-  const [source, setSource] = useState<InputSource>("text");
   const [textInput, setTextInput] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [codeInput, setCodeInput] = useState("");
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [chatGptResult, setChatGptResult] = useState("");
   const [extracted, setExtracted] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [backtesting, setBacktesting] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<StrategyConfig | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [backtestError, setBacktestError] = useState<string | null>(null);
 
   const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:8000/api/v1";
 
-  const handleExtract = async () => {
+  const handleGeneratePrompt = async () => {
+    if (!textInput.trim()) {
+      setPromptError("Please describe your trading idea first.");
+      return;
+    }
+    setPromptError(null);
+
+    try {
+      const res = await fetch(`${apiBase}/extract/prompt-template`);
+      if (!res.ok) throw new Error("Failed to fetch prompt template");
+      const data = await res.json();
+      const fullPrompt = data.template.replace("{text}", textInput.trim());
+
+      await navigator.clipboard.writeText(fullPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+
+      window.open("https://chat.openai.com", "_blank");
+    } catch (e) {
+      setPromptError(e instanceof Error ? e.message : "Failed to generate prompt");
+    }
+  };
+
+  const handleParseStrategy = async () => {
+    if (!chatGptResult.trim()) {
+      setParseError("Paste the JSON from ChatGPT first.");
+      return;
+    }
     setExtracting(true);
     setExtracted(false);
     setBacktestResult(null);
-    setError(null);
+    setParseError(null);
 
     try {
-      let body: FormData | string;
-      const headers: Record<string, string> = {};
-
-      if (source === "pdf") {
-        if (!pdfFile) throw new Error("Please select a PDF file");
-        const fd = new FormData();
-        fd.append("source_type", "pdf");
-        fd.append("file", pdfFile);
-        body = fd;
-      } else {
-        const json: Record<string, string> = { source_type: source };
-        if (source === "text") {
-          if (!textInput.trim()) throw new Error("Text input is empty");
-          json.text = textInput;
-        } else if (source === "youtube") {
-          if (!youtubeUrl.trim()) throw new Error("YouTube URL is required");
-          json.url = youtubeUrl;
-        } else if (source === "code") {
-          if (!codeInput.trim()) throw new Error("Code input is empty");
-          json.text = codeInput;
-        }
-        headers["Content-Type"] = "application/json";
-        body = JSON.stringify(json);
-      }
-
-      const res = await fetch(`${apiBase}/extract`, {
+      const res = await fetch(`${apiBase}/extract/parse-strategy-json`, {
         method: "POST",
-        headers,
-        body,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json_str: chatGptResult.trim() }),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || "Extraction failed");
+        throw new Error(err.detail || "Parse failed");
       }
 
       const data: ExtractResponse = await res.json();
       setStrategyConfig(data.strategy);
       setExtracted(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Extraction failed");
+      setParseError(e instanceof Error ? e.message : "Parse failed");
     } finally {
       setExtracting(false);
     }
@@ -75,7 +74,7 @@ export default function Idea() {
   const handleBacktest = async () => {
     if (!strategyConfig) return;
     setBacktesting(true);
-    setError(null);
+    setBacktestError(null);
 
     try {
       const res = await fetch(`${apiBase}/strategies/backtest`, {
@@ -90,7 +89,7 @@ export default function Idea() {
       const result: BacktestResult = await res.json();
       setBacktestResult(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Backtest failed");
+      setBacktestError(e instanceof Error ? e.message : "Backtest failed");
     } finally {
       setBacktesting(false);
     }
@@ -98,109 +97,69 @@ export default function Idea() {
 
   const handleClear = () => {
     setTextInput("");
-    setYoutubeUrl("");
-    setCodeInput("");
-    setPdfFile(null);
+    setChatGptResult("");
     setExtracted(false);
     setExtracting(false);
     setBacktestResult(null);
     setStrategyConfig(null);
-    setError(null);
-  };
-
-  const handlePdfDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && file.type === "application/pdf") {
-      setPdfFile(file);
-    }
-  };
-
-  const handlePdfClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setPdfFile(file);
+    setPromptError(null);
+    setParseError(null);
+    setBacktestError(null);
+    setCopied(false);
   };
 
   return (
     <div className="grid grid-cols-2 gap-3 items-start">
       {/* Left column: Input + Extracted Strategy */}
       <div>
-        {/* Input Source */}
+        {/* Trading Idea */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5 mb-2.5">
-          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Input Source</div>
-          <div className="flex gap-1 mb-2.5">
-            {(["text", "youtube", "pdf", "code"] as InputSource[]).map((s) => (
-              <button key={s} onClick={() => setSource(s)} className={`relative text-[11px] font-medium px-2.5 py-1 rounded-md transition-all ${source === s ? "bg-[#4e9eff18] border border-blue text-blue" : "border border-transparent text-text-dim hover:text-text"}`}>
-                {s === "text" ? "Text" : s === "youtube" ? "YouTube" : s === "pdf" ? "PDF / Doc" : "Code"}
-              </button>
-            ))}
-          </div>
+          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Trading Idea</div>
 
-          {source === "text" && (
-            <textarea
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
-              rows={5}
-              placeholder="Describe your trading idea...&#10;&#10;e.g. Buy when 20-day EMA crosses above 50-day EMA with RSI confirmation above 50. Exit when price drops below 20-day EMA or RSI falls below 40..."
-            />
-          )}
-
-          {source === "youtube" && (
-            <input
-              type="text"
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              placeholder="Paste YouTube URL..."
-              className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
-            />
-          )}
-
-          {source === "pdf" && (
-            <>
-              <div className="border-2 border-dashed border-[#3a4570] rounded-lg p-5 text-center cursor-pointer hover:border-blue hover:bg-[#4e9eff08] transition-all group" onClick={handlePdfClick} onDragOver={(e) => e.preventDefault()} onDrop={handlePdfDrop}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#556080" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-1.5 group-hover:stroke-blue transition-colors">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                <div className="text-[11px] text-muted">{pdfFile ? pdfFile.name : "Drop PDF file here or click to browse"}</div>
-              </div>
-              <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handlePdfChange} />
-            </>
-          )}
-
-          {source === "code" && (
-            <textarea
-              value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value)}
-              className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text font-['JetBrains_Mono'] resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
-              rows={5}
-              placeholder="Paste your PineScript strategy code here..."
-            />
-          )}
+          <textarea
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
+            rows={5}
+            placeholder="Describe your trading idea...&#10;&#10;e.g. Buy when 20-day EMA crosses above 50-day EMA with RSI confirmation above 50. Exit when price drops below 20-day EMA or RSI falls below 40..."
+          />
 
           <div className="mt-2 flex gap-2">
-            <button onClick={handleExtract} disabled={extracting} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden">
-              {extracting ? (
-                <span className="flex items-center gap-1.5">
-                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
-                  </svg>
-                  Extracting...
-                </span>
-              ) : (
-                "Extract Strategy ↗"
-              )}
+            <button onClick={handleGeneratePrompt} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-blue bg-[#4e9eff18] text-blue hover:bg-blue/10 transition-all">
+              {copied ? "Copied! ✓" : "Generate Prompt → ChatGPT"}
             </button>
             <button onClick={handleClear} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">
               Clear
             </button>
           </div>
+          {promptError && <div className="mt-2 text-[10px] text-red">{promptError}</div>}
+        </div>
+
+        {/* Paste ChatGPT Result */}
+        <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5 mb-2.5">
+          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Paste ChatGPT Result</div>
+          <textarea
+            value={chatGptResult}
+            onChange={(e) => setChatGptResult(e.target.value)}
+            className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
+            rows={6}
+            placeholder="Paste the JSON that ChatGPT returned here..."
+          />
+          <div className="mt-2">
+            <button onClick={handleParseStrategy} disabled={extracting} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden">
+              {extracting ? (
+                <span className="flex items-center gap-1.5">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                  </svg>
+                  Parsing...
+                </span>
+              ) : (
+                "Parse Strategy ↗"
+              )}
+            </button>
+          </div>
+          {parseError && <div className="mt-2 text-[10px] text-red">{parseError}</div>}
         </div>
 
         {/* Extracted Strategy */}
@@ -264,14 +223,14 @@ export default function Idea() {
                   </button>
                   <button className="text-xs font-medium px-3 py-1 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">Optimize →</button>
                 </div>
-                {error && <div className="mt-2 text-[10px] text-red">{error}</div>}
+                {backtestError && <div className="mt-2 text-[10px] text-red">{backtestError}</div>}
               </>
             ) : (
               <div className="text-center py-6 text-muted">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2a3050" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2">
                   <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
                 </svg>
-                Describe a trading idea and click "Extract Strategy" to parse it.
+                Generate a prompt and paste ChatGPT's result here.
               </div>
             )}
           </div>
@@ -350,7 +309,7 @@ export default function Idea() {
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2a3050" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            Extract a strategy, then run a backtest to see results here.
+            Parse a strategy, then run a backtest to see results here.
           </div>
         )}
       </div>

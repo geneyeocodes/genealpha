@@ -1,66 +1,87 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from ..core.schemas import ExtractResponse
-from ..extractor.llm_client import extract_strategy_from_text, extract_strategy_from_code
-from ..extractor.youtube_extractor import get_transcript
-from ..extractor.pdf_extractor import extract_text_from_pdf
-from ..extractor.parser import parse_extracted_strategy
+from ..strategies.config_schema import StrategyConfig
+import json
 
 router = APIRouter()
 
+PROMPT_TEMPLATE = """You are a trading strategy extraction engine. Parse the following trading idea into a structured JSON configuration.
 
-@router.post("/", response_model=ExtractResponse)
-async def extract_strategy(
-    source_type: str = Form("text"),
-    text: str = Form(""),
-    url: str = Form(""),
-    file: UploadFile | None = None,
-):
-    """
-    Extract a trading strategy from various input sources.
+Trading idea:
+{text}
 
-    Source types:
-    - text       : natural language description (via `text` field)
-    - youtube    : YouTube URL (via `url` field) — fetches transcript
-    - pdf        : PDF file upload (via `file` field) — extracts text
-    - code       : PineScript code (via `text` field)
+Return a JSON object with this exact structure:
+{{
+  "name": "strategy name from the idea",
+  "entry_conditions": [
+    {{
+      "type": "crossover" or "crossunder" or "comparison" or "range" or "and" or "or",
+      "indicator": {{"name": "sma|ema|rsi|macd|bollinger|atr|stochastic|obv|volume|vwap|price", "params": {{"period": 14, "source": "close", "stddev": 2.0}}}},
+      // For crossover:
+      "crosses_above": {{"name": "...", "params": {{...}}}},
+      // For crossunder:
+      "crosses_below": {{"name": "...", "params": {{...}}}},
+      // For comparison:
+      "source": "price" or "indicator",
+      "operator": ">" or "<" or ">=" or "<=" or "==" or "!=",
+      "value": 50.0,
+      // For range:
+      "min": 30.0,
+      "max": 70.0,
+      // For and/or:
+      "conditions": [ ... ]
+    }}
+  ],
+  "exit_conditions": [ ... ],
+  "position_sizing": {{
+    "method": "risk_percent" or "fixed_quantity" or "percent_equity",
+    "value": 2.0
+  }},
+  "stop_loss": {{
+    "method": "atr_multiple" or "fixed_percent" or "price_level",
+    "params": {{"multiplier": 1.5}}
+  }},
+  "take_profit": {{
+    "method": "risk_reward_ratio" or "fixed_percent" or "price_level",
+    "params": {{"ratio": 2.0}}
+  }},
+  "timeframe": "1d"
+}}
+
+Rules:
+- Use ONLY the indicators and condition types listed above.
+- For RSI-based conditions, use "comparison" type with indicator name "rsi".
+- For crossover conditions, use "crossover" type (not "comparison").
+- Keep the structure minimal but accurate. Do NOT include fields that aren't needed.
+- If you can't determine all values, use sensible defaults (period=14 for RSI, period=20/50 for EMA crossovers).
+- Respond ONLY with the JSON object, no other text."""
+
+
+class ParseJsonRequest(BaseModel):
+    json_str: str
+
+
+@router.get("/prompt-template")
+async def get_prompt_template():
+    """Return the prebuilt ChatGPT prompt template."""
+    return {"template": PROMPT_TEMPLATE}
+
+
+@router.post("/parse-strategy-json", response_model=ExtractResponse)
+async def parse_strategy_json(request: ParseJsonRequest):
     """
-    raw_text = ""
-    raw_excerpt = ""
+    Accept a raw JSON string (output from ChatGPT), validate it against
+    StrategyConfig, and return the parsed ExtractResponse.
+    """
+    try:
+        raw = json.loads(request.json_str)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
 
     try:
-        if source_type == "text":
-            if not text.strip():
-                raise HTTPException(status_code=400, detail="Text input is empty")
-            raw_text = text
-            raw_excerpt = text[:200]
-
-        elif source_type == "youtube":
-            if not url.strip():
-                raise HTTPException(status_code=400, detail="YouTube URL is required")
-            raw_text = get_transcript(url)
-            raw_excerpt = raw_text[:200]
-
-        elif source_type == "pdf":
-            if not file:
-                raise HTTPException(status_code=400, detail="PDF file is required")
-            content = await file.read()
-            raw_text = extract_text_from_pdf(content)
-            raw_excerpt = raw_text[:200]
-
-        elif source_type == "code":
-            if not text.strip():
-                raise HTTPException(status_code=400, detail="Code input is empty")
-            raw_dict = await extract_strategy_from_code(text)
-            return await parse_extracted_strategy(raw_dict, source_type="code", raw_excerpt=text[:200])
-
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported source_type: {source_type}")
-
-        # For text / youtube / pdf: pass extracted text to LLM
-        raw_dict = await extract_strategy_from_text(raw_text)
-        return await parse_extracted_strategy(raw_dict, source_type=source_type, raw_excerpt=raw_excerpt)
-
-    except HTTPException:
-        raise
+        config = StrategyConfig(**raw)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid strategy config: {e}")
+
+    return ExtractResponse(strategy=config, source_type="manual", raw_excerpt=None)
