@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { PageTab } from "./types";
+import type { PageTab, StrategyConfig } from "./types";
 import Navbar from "./components/Navbar";
 import Dashboard from "./pages/Dashboard";
 import Idea from "./pages/Idea";
@@ -11,6 +11,9 @@ function App() {
   const [wsStatus, setWsStatus] = useState<"connected" | "disconnected" | "connecting">("connecting");
   const wsRef = useRef<WebSocket | null>(null);
   const [transitionKey, setTransitionKey] = useState(0);
+
+  // Shared state: strategy config from Idea → Optimize
+  const [optimizeConfig, setOptimizeConfig] = useState<StrategyConfig | null>(null);
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
@@ -41,6 +44,12 @@ function App() {
     setTransitionKey((k) => k + 1);
   };
 
+  const handleOptimize = (config: StrategyConfig) => {
+    setOptimizeConfig(config);
+    setActiveTab("optimize");
+    setTransitionKey((k) => k + 1);
+  };
+
   const renderPage = () => {
     const className = "page-enter";
     switch (activeTab) {
@@ -53,13 +62,13 @@ function App() {
       case "idea":
         return (
           <div key={transitionKey} className={className}>
-            <Idea />
+            <Idea onOptimize={handleOptimize} />
           </div>
         );
       case "optimize":
         return (
           <div key={transitionKey} className={className}>
-            <Optimize />
+            <Optimize strategyConfig={optimizeConfig} />
           </div>
         );
       case "deploy":

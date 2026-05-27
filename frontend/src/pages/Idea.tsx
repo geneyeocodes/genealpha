@@ -1,7 +1,11 @@
 import { useState } from "react";
 import type { StrategyConfig, ExtractResponse, BacktestResult } from "../types";
 
-export default function Idea() {
+interface IdeaProps {
+  onOptimize: (config: StrategyConfig) => void;
+}
+
+export default function Idea({ onOptimize }: IdeaProps) {
   const [textInput, setTextInput] = useState("");
   const [chatGptResult, setChatGptResult] = useState("");
   const [extracted, setExtracted] = useState(false);
@@ -76,7 +80,6 @@ export default function Idea() {
     setBacktesting(true);
     setBacktestError(null);
 
-    // Compute dynamic 20-year range from today
     const endDate = new Date().toISOString().split("T")[0];
     const startDate = new Date(Date.now() - 20 * 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
@@ -231,7 +234,9 @@ export default function Idea() {
                   <button onClick={handleBacktest} disabled={backtesting} className="text-xs font-medium px-3 py-1 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-50">
                     {backtesting ? "Backtesting..." : "Run Backtest ↗"}
                   </button>
-                  <button className="text-xs font-medium px-3 py-1 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">Optimize →</button>
+                  <button onClick={() => onOptimize(strategyConfig!)} className="text-xs font-medium px-3 py-1 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">
+                    Optimize →
+                  </button>
                 </div>
                 {backtestError && <div className="mt-2 text-[10px] text-red">{backtestError}</div>}
               </>
@@ -275,7 +280,6 @@ export default function Idea() {
               </div>
             </div>
 
-            {/* Equity curve chart */}
             {backtestResult.equity_curve?.length > 0 && (
               <div className="bg-dark-700 border border-dark-600 rounded-lg p-2.5 mb-2">
                 <div className="text-[10px] text-muted mb-1">EQUITY CURVE</div>
