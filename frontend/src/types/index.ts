@@ -79,6 +79,7 @@ export interface Condition {
   min?: number | null;
   max?: number | null;
   conditions?: Condition[] | null;
+  compare_to_indicator?: IndicatorRef | null;
 }
 
 export interface IndicatorRef {
