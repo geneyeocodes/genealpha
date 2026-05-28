@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     database_url: str = Field(default="")
     ibkr_host: str = Field(default="")
     ibkr_port: int = Field(default=0)
-    polygon_api_key: str = Field(default="")
 
     model_config = {
         "env_file": Path(__file__).resolve().parent.parent / ".env",

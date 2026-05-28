@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text, JSON, ForeignKey, Enum as SAEnum
-from sqlalchemy.orm import relationship
+from typing import Optional
+from sqlalchemy import String, Float, Integer, Boolean, DateTime, Text, JSON, ForeignKey, Enum as SAEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 from .database import Base
 
@@ -28,19 +29,18 @@ class OrderType(str, enum.Enum):
 class Bot(Base):
     __tablename__ = "bots"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(255), nullable=False)
-    symbol = Column(String(20), nullable=False)
-    status = Column(SAEnum(BotStatus), default=BotStatus.STOPPED)
-    account_mode = Column(SAEnum(AccountMode), default=AccountMode.PAPER)
-    order_type = Column(SAEnum(OrderType), default=OrderType.MARKET)
-    max_position_size = Column(Float, default=5000.0)
-    max_daily_loss = Column(Float, default=200.0)
-    # Replaced strategy_name + strategy_params with a single strategy_config JSON
-    strategy_config = Column(JSON, nullable=False, default=dict)
-    schedule_cron = Column(String(50), default="0 9 * * 1-5")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[BotStatus] = mapped_column(SAEnum(BotStatus), default=BotStatus.STOPPED)
+    account_mode: Mapped[AccountMode] = mapped_column(SAEnum(AccountMode), default=AccountMode.PAPER)
+    order_type: Mapped[OrderType] = mapped_column(SAEnum(OrderType), default=OrderType.MARKET)
+    max_position_size: Mapped[float] = mapped_column(Float, default=5000.0)
+    max_daily_loss: Mapped[float] = mapped_column(Float, default=200.0)
+    strategy_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    schedule_cron: Mapped[str] = mapped_column(String(50), default="0 9 * * 1-5")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     trades = relationship("Trade", back_populates="bot", cascade="all, delete-orphan")
     backtest_results = relationship("BacktestResult", back_populates="bot", cascade="all, delete-orphan")
@@ -50,14 +50,14 @@ class Bot(Base):
 class Trade(Base):
     __tablename__ = "trades"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    bot_id = Column(String, ForeignKey("bots.id"), nullable=False)
-    symbol = Column(String(20), nullable=False)
-    side = Column(String(10), nullable=False)
-    quantity = Column(Float, nullable=False)
-    price = Column(Float, nullable=False)
-    pnl = Column(Float, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    bot_id: Mapped[str] = mapped_column(String, ForeignKey("bots.id"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    side: Mapped[str] = mapped_column(String(10), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     bot = relationship("Bot", back_populates="trades")
 
@@ -65,19 +65,19 @@ class Trade(Base):
 class BacktestResult(Base):
     __tablename__ = "backtest_results"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    bot_id = Column(String, ForeignKey("bots.id"), nullable=False)
-    total_return = Column(Float)
-    sharpe_ratio = Column(Float)
-    max_drawdown = Column(Float)
-    win_rate = Column(Float)
-    total_trades = Column(Integer)
-    avg_hold_days = Column(Float)
-    profit_factor = Column(Float)
-    equity_curve = Column(JSON)
-    start_date = Column(DateTime)
-    end_date = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    bot_id: Mapped[str] = mapped_column(String, ForeignKey("bots.id"), nullable=False)
+    total_return: Mapped[Optional[float]] = mapped_column(Float)
+    sharpe_ratio: Mapped[Optional[float]] = mapped_column(Float)
+    max_drawdown: Mapped[Optional[float]] = mapped_column(Float)
+    win_rate: Mapped[Optional[float]] = mapped_column(Float)
+    total_trades: Mapped[Optional[int]] = mapped_column(Integer)
+    avg_hold_days: Mapped[Optional[float]] = mapped_column(Float)
+    profit_factor: Mapped[Optional[float]] = mapped_column(Float)
+    equity_curve: Mapped[Optional[dict]] = mapped_column(JSON)
+    start_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     bot = relationship("Bot", back_populates="backtest_results")
 
@@ -85,14 +85,14 @@ class BacktestResult(Base):
 class Optimization(Base):
     __tablename__ = "optimizations"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    bot_id = Column(String, ForeignKey("bots.id"), nullable=False)
-    total_trials = Column(Integer)
-    best_params = Column(JSON)
-    best_sharpe = Column(Float)
-    best_return = Column(Float)
-    best_drawdown = Column(Float)
-    results = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    bot_id: Mapped[str] = mapped_column(String, ForeignKey("bots.id"), nullable=False)
+    total_trials: Mapped[Optional[int]] = mapped_column(Integer)
+    best_params: Mapped[Optional[dict]] = mapped_column(JSON)
+    best_sharpe: Mapped[Optional[float]] = mapped_column(Float)
+    best_return: Mapped[Optional[float]] = mapped_column(Float)
+    best_drawdown: Mapped[Optional[float]] = mapped_column(Float)
+    results: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     bot = relationship("Bot", back_populates="optimizations")

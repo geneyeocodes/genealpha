@@ -11,19 +11,16 @@ function App() {
   const [wsStatus, setWsStatus] = useState<"connected" | "disconnected" | "connecting">("connecting");
   const wsRef = useRef<WebSocket | null>(null);
   const [transitionKey, setTransitionKey] = useState(0);
-
-  // Shared state: strategy config from Idea → Optimize
   const [optimizeConfig, setOptimizeConfig] = useState<StrategyConfig | null>(null);
+  const [deployBotId, setDeployBotId] = useState<string | null>(null);
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
-
     function connect() {
       setWsStatus("connecting");
       const wsBase = import.meta.env.VITE_WS_BASE || "ws://localhost:8000/api/v1";
       const ws = new WebSocket(`${wsBase}/ws/live`);
       wsRef.current = ws;
-
       ws.onopen = () => setWsStatus("connected");
       ws.onclose = () => {
         setWsStatus("disconnected");
@@ -31,7 +28,6 @@ function App() {
       };
       ws.onerror = () => ws.close();
     }
-
     connect();
     return () => {
       clearTimeout(reconnectTimer);
@@ -40,6 +36,13 @@ function App() {
   }, []);
 
   const handleTabChange = (tab: PageTab) => {
+    setActiveTab(tab);
+    setTransitionKey((k) => k + 1);
+    if (tab !== "deploy") setDeployBotId(null);
+  };
+
+  const handleNavigate = (tab: PageTab, botId?: string) => {
+    if (botId) setDeployBotId(botId);
     setActiveTab(tab);
     setTransitionKey((k) => k + 1);
   };
@@ -56,25 +59,25 @@ function App() {
       case "dashboard":
         return (
           <div key={transitionKey} className={className}>
-            <Dashboard />
+            <Dashboard onNavigate={handleNavigate} />
           </div>
         );
       case "idea":
         return (
           <div key={transitionKey} className={className}>
-            <Idea onOptimize={handleOptimize} />
+            <Idea onOptimize={handleOptimize} onNavigate={handleNavigate} />
           </div>
         );
       case "optimize":
         return (
           <div key={transitionKey} className={className}>
-            <Optimize strategyConfig={optimizeConfig} />
+            <Optimize strategyConfig={optimizeConfig} onNavigate={handleNavigate} />
           </div>
         );
       case "deploy":
         return (
           <div key={transitionKey} className={className}>
-            <Deploy />
+            <Deploy botId={deployBotId} />
           </div>
         );
     }

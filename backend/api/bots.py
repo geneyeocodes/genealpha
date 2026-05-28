@@ -4,6 +4,7 @@ from sqlalchemy import select
 from ..core.database import get_db
 from ..core.models import Bot, BotStatus
 from ..core.schemas import BotCreate, BotUpdate, BotResponse
+from ..core.bot_runtime import manager as runtime_manager
 
 router = APIRouter()
 
@@ -48,6 +49,7 @@ async def delete_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+    await runtime_manager.stop_bot(bot_id)
     await db.delete(bot)
     await db.commit()
 
@@ -57,6 +59,7 @@ async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+    await runtime_manager.start_bot(bot)
     bot.status = BotStatus.RUNNING
     await db.commit()
     await db.refresh(bot)
@@ -68,7 +71,16 @@ async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+    await runtime_manager.stop_bot(bot_id)
     bot.status = BotStatus.STOPPED
     await db.commit()
     await db.refresh(bot)
     return bot
+
+
+@router.get("/{bot_id}/status")
+async def bot_status(bot_id: str):
+    return {
+        "bot_id": bot_id,
+        "runtime_status": runtime_manager.get_status(bot_id),
+    }

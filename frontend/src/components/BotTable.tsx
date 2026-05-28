@@ -40,7 +40,7 @@ export default function BotTable({ bots, onStop, onView, onDeploy }: BotTablePro
                 {isRunning && <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-accent rounded-full shadow-[0_0_4px_#22d3a5]" />}
                 <span className="font-['JetBrains_Mono'] text-text font-medium ml-1">{bot.name}</span>
               </td>
-              <td className="py-2 px-2.5 border-b border-dark-600 font-['JetBrains_Mono'] text-text-dim">{bot.strategy_name}</td>
+              <td className="py-2 px-2.5 border-b border-dark-600 font-['JetBrains_Mono'] text-text-dim">{(bot.strategy_config as any)?.name || bot.name}</td>
               <td className="py-2 px-2.5 border-b border-dark-600 font-['JetBrains_Mono']">{bot.symbol}</td>
               <td className="py-2 px-2.5 border-b border-dark-600">
                 <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full border ${badge.class}`}>

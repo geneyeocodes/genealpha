@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import type { StrategyConfig } from "../types";
+import type { StrategyConfig, PageTab } from "../types";
+import { apiPost } from "../api/client";
 
 interface OptimizeProps {
   strategyConfig: StrategyConfig | null;
+  onNavigate?: (tab: PageTab, botId?: string) => void;
 }
 
 interface OptimizationResponse {
@@ -24,18 +26,11 @@ interface TopResultRow {
   profit_factor: number | null;
 }
 
-/**
- * Walk the config tree following a dot-path, extracting human-readable context.
- * E.g. "entry_conditions.0.indicator.params.period" → "Entry 1 SMA Period"
- *       "stop_loss.params.multiplier"             → "Stop Loss Mltplr"
- *       "position_sizing.value"                   → "Position Size Value"
- */
 function describeParam(config: StrategyConfig, dotPath: string): string {
   const parts = dotPath.split(".");
   const leafKey = parts[parts.length - 1];
   const shortKey = leafKey.replace("period", "Period").replace("stddev", "StdDev").replace("multiplier", "Mltplr").replace("ratio", "Ratio").replace("value", "Value").replace("percent", "Percent");
 
-  // Helper: get indicator name from a condition at the given index within a list
   const getIndicatorName = (conditionList: string, idx: number): string | null => {
     const list = conditionList === "entry_conditions" ? config.entry_conditions : config.exit_conditions;
     const cond = list[idx];
@@ -46,7 +41,6 @@ function describeParam(config: StrategyConfig, dotPath: string): string {
     return null;
   };
 
-  // Detect entry/exit condition paths
   if (parts[0] === "entry_conditions" && parts.length >= 2) {
     const idx = parseInt(parts[1], 10);
     const indName = getIndicatorName("entry_conditions", idx);
@@ -69,18 +63,33 @@ function describeParam(config: StrategyConfig, dotPath: string): string {
     return sub ? `${prefix} ${sub}` : prefix;
   }
 
-  // Clean up other paths
   const cleanParts = parts.filter((p) => p !== "params");
   const cleaned = cleanParts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).replace(/_/g, " ")).join(" ");
-
   return cleaned || shortKey;
 }
 
-export default function Optimize({ strategyConfig }: OptimizeProps) {
+function deepMergeParams(obj: Record<string, unknown>, params: Record<string, number>, prefix = ""): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...obj };
+  for (const [key, val] of Object.entries(result)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (params[path] !== undefined) {
+      result[key] = params[path];
+    } else if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      result[key] = deepMergeParams(val as Record<string, unknown>, params, path);
+    } else if (Array.isArray(val)) {
+      result[key] = val.map((item, i) => (typeof item === "object" && item !== null ? deepMergeParams(item as Record<string, unknown>, params, `${path}.${i}`) : item));
+    }
+  }
+  return result;
+}
+
+export default function Optimize({ strategyConfig, onNavigate }: OptimizeProps) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<OptimizationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
   const [symbol, setSymbol] = useState("SPY");
   const [trials, setTrials] = useState(240);
 
@@ -111,6 +120,7 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
     setProgress(0);
     setError(null);
     setResult(null);
+    setDeployError(null);
 
     let progressValue = 0;
     const progressInterval = setInterval(() => {
@@ -122,18 +132,12 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
       const res = await fetch(`${apiBase}/optimize/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          config: strategyConfig,
-          symbol,
-          total_trials: trials,
-        }),
+        body: JSON.stringify({ config: strategyConfig, symbol, total_trials: trials }),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || "Optimization failed");
       }
-
       const data: OptimizationResponse = await res.json();
       setResult(data);
       setProgress(100);
@@ -142,6 +146,30 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
     } finally {
       clearInterval(progressInterval);
       setRunning(false);
+    }
+  };
+
+  const handleDeployBest = async () => {
+    if (!strategyConfig || !result) return;
+    setDeploying(true);
+    setDeployError(null);
+    try {
+      const mergedConfig = deepMergeParams(strategyConfig as unknown as Record<string, unknown>, result.best_params);
+      const bot = await apiPost<{ id: string }>("/bots/", {
+        name: strategyConfig.name,
+        symbol,
+        strategy_config: mergedConfig,
+        account_mode: "paper",
+        order_type: "market",
+        max_position_size: 5000,
+        max_daily_loss: 200,
+        schedule_cron: "0 9 * * 1-5",
+      });
+      onNavigate?.("deploy", bot.id);
+    } catch (e) {
+      setDeployError(e instanceof Error ? e.message : "Failed to create bot");
+    } finally {
+      setDeploying(false);
     }
   };
 
@@ -167,11 +195,9 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
 
   return (
     <div className="grid grid-cols-2 gap-3 items-start">
-      {/* Controls */}
       <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
         <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-1">Optimization Settings</div>
         <div className="text-[11px] text-muted mb-3">{strategyConfig ? <>Strategy: {strategyConfig.name}</> : <span className="text-red">No strategy loaded — parse one in Idea tab first</span>}</div>
-
         <div className="space-y-2.5 mb-3">
           <div className="flex items-center gap-2">
             <label className="text-[11px] text-muted w-20">Symbol</label>
@@ -182,13 +208,10 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
             <input type="number" value={trials} onChange={(e) => setTrials(Math.max(10, Number(e.target.value)))} min={10} max={1000} className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-text outline-none focus:border-blue" />
           </div>
         </div>
-
-        {/* Objective info (static) */}
         <div className="mb-3">
           <div className="text-[10px] text-accent font-medium mb-0.5">Objective: Composite Score</div>
           <div className="text-[9px] text-muted leading-relaxed">40% Sharpe + 25% Return − 20% DD + 10% Win Rate + 5% Profit Factor</div>
         </div>
-
         {paramLabels.length > 0 && (
           <div className="mb-3">
             <div className="text-[10px] text-muted mb-1">PARAMETERS TO OPTIMIZE ({paramLabels.length})</div>
@@ -201,7 +224,6 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
             </div>
           </div>
         )}
-
         <div className="space-y-2">
           <button onClick={handleRun} disabled={running || !strategyConfig} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden">
             {running ? (
@@ -225,7 +247,6 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
         </div>
       </div>
 
-      {/* Results */}
       <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
         <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Optimization Results</div>
 
@@ -257,6 +278,21 @@ export default function Optimize({ strategyConfig }: OptimizeProps) {
                   ))}
                 </div>
               )}
+              <div className="mt-2 pt-2 border-t border-dark-600">
+                <button onClick={handleDeployBest} disabled={deploying} className="relative text-xs font-medium px-4 py-1.5 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden">
+                  {deploying ? (
+                    <span className="flex items-center gap-1.5">
+                      <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                      </svg>
+                      Creating bot...
+                    </span>
+                  ) : (
+                    "🚀 Create Bot & Deploy"
+                  )}
+                </button>
+                {deployError && <div className="mt-1 text-[10px] text-red">{deployError}</div>}
+              </div>
             </div>
 
             <div className="flex gap-1.5 mb-2.5 flex-wrap">

@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any
 from datetime import datetime
-from backend.strategies.config_schema import StrategyConfig
 
 
 class BotCreate(BaseModel):
@@ -11,8 +10,7 @@ class BotCreate(BaseModel):
     order_type: str = "market"
     max_position_size: float = 5000.0
     max_daily_loss: float = 200.0
-    strategy_name: str
-    strategy_params: dict = {}
+    strategy_config: dict  # full StrategyConfig JSON
     schedule_cron: str = "0 9 * * 1-5"
 
 
@@ -23,7 +21,7 @@ class BotUpdate(BaseModel):
     order_type: Optional[str] = None
     max_position_size: Optional[float] = None
     max_daily_loss: Optional[float] = None
-    strategy_params: Optional[dict] = None
+    strategy_config: Optional[dict] = None
     schedule_cron: Optional[str] = None
 
 
@@ -36,8 +34,7 @@ class BotResponse(BaseModel):
     order_type: str
     max_position_size: float
     max_daily_loss: float
-    strategy_name: str
-    strategy_params: dict
+    strategy_config: dict
     schedule_cron: str
     created_at: datetime
 
@@ -104,6 +101,6 @@ class ExtractRequest(BaseModel):
 
 
 class ExtractResponse(BaseModel):
-    strategy: StrategyConfig
+    strategy: Any
     source_type: str = "text"
-    raw_excerpt: Optional[str] = None  # first 200 chars of the source, for frontend display
+    raw_excerpt: Optional[str] = None

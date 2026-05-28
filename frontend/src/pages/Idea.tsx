@@ -1,11 +1,13 @@
 import { useState } from "react";
-import type { StrategyConfig, ExtractResponse, BacktestResult } from "../types";
+import type { StrategyConfig, ExtractResponse, BacktestResult, PageTab } from "../types";
+import { apiPost } from "../api/client";
 
 interface IdeaProps {
   onOptimize: (config: StrategyConfig) => void;
+  onNavigate?: (tab: PageTab, botId?: string) => void;
 }
 
-export default function Idea({ onOptimize }: IdeaProps) {
+export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
   const [textInput, setTextInput] = useState("");
   const [chatGptResult, setChatGptResult] = useState("");
   const [extracted, setExtracted] = useState(false);
@@ -17,6 +19,8 @@ export default function Idea({ onOptimize }: IdeaProps) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [backtestError, setBacktestError] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
 
   const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:8000/api/v1";
 
@@ -26,17 +30,14 @@ export default function Idea({ onOptimize }: IdeaProps) {
       return;
     }
     setPromptError(null);
-
     try {
       const res = await fetch(`${apiBase}/extract/prompt-template`);
       if (!res.ok) throw new Error("Failed to fetch prompt template");
       const data = await res.json();
       const fullPrompt = data.template.replace("{text}", textInput.trim());
-
       await navigator.clipboard.writeText(fullPrompt);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-
       window.open("https://chat.openai.com", "_blank");
     } catch (e) {
       setPromptError(e instanceof Error ? e.message : "Failed to generate prompt");
@@ -52,19 +53,16 @@ export default function Idea({ onOptimize }: IdeaProps) {
     setExtracted(false);
     setBacktestResult(null);
     setParseError(null);
-
     try {
       const res = await fetch(`${apiBase}/extract/parse-strategy-json`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ json_str: chatGptResult.trim() }),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || "Parse failed");
       }
-
       const data: ExtractResponse = await res.json();
       setStrategyConfig(data.strategy);
       setExtracted(true);
@@ -79,10 +77,8 @@ export default function Idea({ onOptimize }: IdeaProps) {
     if (!strategyConfig) return;
     setBacktesting(true);
     setBacktestError(null);
-
     const endDate = new Date().toISOString().split("T")[0];
     const startDate = new Date(Date.now() - 20 * 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
     try {
       const res = await fetch(`${apiBase}/strategies/backtest`, {
         method: "POST",
@@ -108,6 +104,29 @@ export default function Idea({ onOptimize }: IdeaProps) {
     }
   };
 
+  const handleDeployStrategy = async () => {
+    if (!strategyConfig) return;
+    setDeploying(true);
+    setDeployError(null);
+    try {
+      const bot = await apiPost<{ id: string }>("/bots/", {
+        name: strategyConfig.name,
+        symbol: "SPY",
+        strategy_config: strategyConfig,
+        account_mode: "paper",
+        order_type: "market",
+        max_position_size: 5000,
+        max_daily_loss: 200,
+        schedule_cron: "0 9 * * 1-5",
+      });
+      onNavigate?.("deploy", bot.id);
+    } catch (e) {
+      setDeployError(e instanceof Error ? e.message : "Failed to create bot");
+    } finally {
+      setDeploying(false);
+    }
+  };
+
   const handleClear = () => {
     setTextInput("");
     setChatGptResult("");
@@ -119,16 +138,14 @@ export default function Idea({ onOptimize }: IdeaProps) {
     setParseError(null);
     setBacktestError(null);
     setCopied(false);
+    setDeployError(null);
   };
 
   return (
     <div className="grid grid-cols-2 gap-3 items-start">
-      {/* Left column: Input + Extracted Strategy */}
       <div>
-        {/* Trading Idea */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5 mb-2.5">
           <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Trading Idea</div>
-
           <textarea
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
@@ -136,7 +153,6 @@ export default function Idea({ onOptimize }: IdeaProps) {
             rows={5}
             placeholder="Describe your trading idea...&#10;&#10;e.g. Buy when 20-day EMA crosses above 50-day EMA with RSI confirmation above 50. Exit when price drops below 20-day EMA or RSI falls below 40..."
           />
-
           <div className="mt-2 flex gap-2">
             <button onClick={handleGeneratePrompt} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-blue bg-[#4e9eff18] text-blue hover:bg-blue/10 transition-all">
               {copied ? "Copied! ✓" : "Generate Prompt → ChatGPT"}
@@ -148,7 +164,6 @@ export default function Idea({ onOptimize }: IdeaProps) {
           {promptError && <div className="mt-2 text-[10px] text-red">{promptError}</div>}
         </div>
 
-        {/* Paste ChatGPT Result */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5 mb-2.5">
           <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Paste ChatGPT Result</div>
           <textarea
@@ -175,7 +190,6 @@ export default function Idea({ onOptimize }: IdeaProps) {
           {parseError && <div className="mt-2 text-[10px] text-red">{parseError}</div>}
         </div>
 
-        {/* Extracted Strategy */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
           <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Extracted Strategy</div>
           <div className="bg-dark-700 border border-dark-600 rounded-lg p-3 text-[11px] leading-relaxed text-text-dim min-h-35">
@@ -237,8 +251,12 @@ export default function Idea({ onOptimize }: IdeaProps) {
                   <button onClick={() => onOptimize(strategyConfig!)} className="text-xs font-medium px-3 py-1 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">
                     Optimize →
                   </button>
+                  <button onClick={handleDeployStrategy} disabled={deploying} className="text-xs font-medium px-3 py-1 rounded-lg border border-accent bg-accent/10 text-accent hover:bg-accent-dim transition-all disabled:opacity-50">
+                    {deploying ? "Creating..." : "🚀 Deploy Bot"}
+                  </button>
                 </div>
                 {backtestError && <div className="mt-2 text-[10px] text-red">{backtestError}</div>}
+                {deployError && <div className="mt-2 text-[10px] text-red">{deployError}</div>}
               </>
             ) : (
               <div className="text-center py-6 text-muted">
@@ -252,7 +270,6 @@ export default function Idea({ onOptimize }: IdeaProps) {
         </div>
       </div>
 
-      {/* Right column: Backtest Results */}
       <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
         <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Backtest Results {backtestResult ? `— ${backtestResult.total_trades} trades` : ""}</div>
 

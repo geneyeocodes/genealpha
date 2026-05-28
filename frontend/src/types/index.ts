@@ -7,8 +7,7 @@ export interface Bot {
   order_type: "market" | "limit" | "moc";
   max_position_size: number;
   max_daily_loss: number;
-  strategy_name: string;
-  strategy_params: Record<string, number>;
+  strategy_config: Record<string, unknown>;
   schedule_cron: string;
   created_at: string;
 }
@@ -39,8 +38,6 @@ export interface BacktestResult {
     exit_price: number;
     pnl: number;
   }>;
-
-  // DB-persisted fields (only present when reading from /backtest/ endpoint)
   id?: string;
   bot_id?: string;
   created_at?: string;
@@ -91,7 +88,6 @@ export interface IndicatorRef {
   };
 }
 
-/** Response from POST /api/v1/extract */
 export interface ExtractResponse {
   strategy: StrategyConfig;
   source_type: string;
