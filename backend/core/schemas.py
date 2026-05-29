@@ -10,7 +10,8 @@ class BotCreate(BaseModel):
     order_type: str = "market"
     max_position_size: float = 5000.0
     max_daily_loss: float = 200.0
-    strategy_config: dict  # full StrategyConfig JSON
+    script_name: str = "sma_crossover"
+    script_params: dict = {}
     schedule_cron: str = "0 9 * * 1-5"
 
 
@@ -21,7 +22,8 @@ class BotUpdate(BaseModel):
     order_type: Optional[str] = None
     max_position_size: Optional[float] = None
     max_daily_loss: Optional[float] = None
-    strategy_config: Optional[dict] = None
+    script_name: Optional[str] = None
+    script_params: Optional[dict] = None
     schedule_cron: Optional[str] = None
 
 
@@ -34,7 +36,8 @@ class BotResponse(BaseModel):
     order_type: str
     max_position_size: float
     max_daily_loss: float
-    strategy_config: dict
+    script_name: str
+    script_params: dict
     schedule_cron: str
     created_at: datetime
 
@@ -63,13 +66,12 @@ class BacktestRequest(BaseModel):
 class BacktestResponse(BaseModel):
     id: str
     bot_id: str
-    total_return: Optional[float]
-    sharpe_ratio: Optional[float]
+    total_pnl: Optional[float]
     max_drawdown: Optional[float]
-    win_rate: Optional[float]
+    profitable_trades: Optional[int]
     total_trades: Optional[int]
-    avg_hold_days: Optional[float]
     profit_factor: Optional[float]
+    sharpe_ratio: Optional[float]
     equity_curve: Optional[Any]
     created_at: datetime
 
@@ -78,7 +80,7 @@ class BacktestResponse(BaseModel):
 
 class OptimizationRequest(BaseModel):
     bot_id: str
-    total_trials: int = 240
+    total_trials: int = 100
 
 
 class OptimizationResponse(BaseModel):
@@ -86,9 +88,10 @@ class OptimizationResponse(BaseModel):
     bot_id: str
     total_trials: Optional[int]
     best_params: Optional[dict]
-    best_sharpe: Optional[float]
-    best_return: Optional[float]
-    best_drawdown: Optional[float]
+    best_total_pnl: Optional[float]
+    best_max_drawdown: Optional[float]
+    best_profitable_trades: Optional[int]
+    best_profit_factor: Optional[float]
     results: Optional[Any]
     created_at: datetime
 
@@ -97,10 +100,10 @@ class OptimizationResponse(BaseModel):
 
 class ExtractRequest(BaseModel):
     text: str
-    source_type: str = "text"
 
 
 class ExtractResponse(BaseModel):
-    strategy: Any
-    source_type: str = "text"
-    raw_excerpt: Optional[str] = None
+    script_name: str
+    param_count: int
+    params: dict
+    source_code: str

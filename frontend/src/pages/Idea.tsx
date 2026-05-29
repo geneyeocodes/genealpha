@@ -1,9 +1,9 @@
-import { useState } from "react";
-import type { StrategyConfig, ExtractResponse, BacktestResult, PageTab } from "../types";
-import { apiPost } from "../api/client";
+import { useState, useEffect } from "react";
+import type { StrategyScript, ExtractResponse, BacktestResult, PageTab } from "../types";
+import { apiPost, apiGet } from "../api/client";
 
 interface IdeaProps {
-  onOptimize: (config: StrategyConfig) => void;
+  onOptimize: (scriptName: string, params: Record<string, number>) => void;
   onNavigate?: (tab: PageTab, botId?: string) => void;
 }
 
@@ -13,7 +13,7 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
   const [extracted, setExtracted] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [backtesting, setBacktesting] = useState(false);
-  const [strategyConfig, setStrategyConfig] = useState<StrategyConfig | null>(null);
+  const [scriptName, setScriptName] = useState("");
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -21,8 +21,35 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
   const [backtestError, setBacktestError] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+  const [availableScripts, setAvailableScripts] = useState<StrategyScript[]>([]);
+  const [selectedScript, setSelectedScript] = useState("sma_crossover");
+  const [scriptSpec, setScriptSpec] = useState<StrategyScript | null>(null);
+  const [paramValues, setParamValues] = useState<Record<string, number>>({});
 
   const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:8000/api/v1";
+
+  useEffect(() => {
+    apiGet<{ scripts: StrategyScript[] }>("/strategies/scripts")
+      .then((data) => {
+        setAvailableScripts(data.scripts);
+        if (data.scripts.length > 0) setSelectedScript(data.scripts[0].name);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedScript) return;
+    apiGet<StrategyScript>(`/scripts/${selectedScript}`)
+      .then((spec) => {
+        setScriptSpec(spec);
+        const defaults: Record<string, number> = {};
+        for (const [key, val] of Object.entries(spec.params)) {
+          defaults[key] = val.default;
+        }
+        setParamValues(defaults);
+      })
+      .catch(() => {});
+  }, [selectedScript]);
 
   const handleGeneratePrompt = async () => {
     if (!textInput.trim()) {
@@ -46,7 +73,7 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
 
   const handleParseStrategy = async () => {
     if (!chatGptResult.trim()) {
-      setParseError("Paste the JSON from ChatGPT first.");
+      setParseError("Paste the Python code from ChatGPT first.");
       return;
     }
     setExtracting(true);
@@ -54,18 +81,26 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
     setBacktestResult(null);
     setParseError(null);
     try {
-      const res = await fetch(`${apiBase}/extract/parse-strategy-json`, {
+      const name =
+        textInput
+          .trim()
+          .slice(0, 30)
+          .replace(/[^a-zA-Z0-9 ]/g, "") || "Custom Strategy";
+      const res = await fetch(`${apiBase}/extract/parse-strategy-script`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ json_str: chatGptResult.trim() }),
+        body: JSON.stringify({ name, source_code: chatGptResult.trim() }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || "Parse failed");
       }
       const data: ExtractResponse = await res.json();
-      setStrategyConfig(data.strategy);
+      setScriptName(data.script_name);
       setExtracted(true);
+      const scriptsRes = await apiGet<{ scripts: StrategyScript[] }>("/strategies/scripts");
+      setAvailableScripts(scriptsRes.scripts);
+      setSelectedScript(data.script_name);
     } catch (e) {
       setParseError(e instanceof Error ? e.message : "Parse failed");
     } finally {
@@ -74,7 +109,6 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
   };
 
   const handleBacktest = async () => {
-    if (!strategyConfig) return;
     setBacktesting(true);
     setBacktestError(null);
     const endDate = new Date().toISOString().split("T")[0];
@@ -84,7 +118,8 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          config: strategyConfig,
+          script_name: selectedScript,
+          params: paramValues,
           symbol: "SPY",
           start_date: startDate,
           end_date: endDate,
@@ -105,14 +140,14 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
   };
 
   const handleDeployStrategy = async () => {
-    if (!strategyConfig) return;
     setDeploying(true);
     setDeployError(null);
     try {
       const bot = await apiPost<{ id: string }>("/bots/", {
-        name: strategyConfig.name,
+        name: scriptName || selectedScript,
         symbol: "SPY",
-        strategy_config: strategyConfig,
+        script_name: selectedScript,
+        script_params: paramValues,
         account_mode: "paper",
         order_type: "market",
         max_position_size: 5000,
@@ -133,7 +168,6 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
     setExtracted(false);
     setExtracting(false);
     setBacktestResult(null);
-    setStrategyConfig(null);
     setPromptError(null);
     setParseError(null);
     setBacktestError(null);
@@ -144,14 +178,15 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
   return (
     <div className="grid grid-cols-2 gap-3 items-start">
       <div>
+        {/* Strategy Generator */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5 mb-2.5">
-          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Trading Idea</div>
+          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Trading Idea → Script Generator</div>
           <textarea
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
-            rows={5}
-            placeholder="Describe your trading idea...&#10;&#10;e.g. Buy when 20-day EMA crosses above 50-day EMA with RSI confirmation above 50. Exit when price drops below 20-day EMA or RSI falls below 40..."
+            rows={4}
+            placeholder="Describe your trading idea..."
           />
           <div className="mt-2 flex gap-2">
             <button onClick={handleGeneratePrompt} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-blue bg-[#4e9eff18] text-blue hover:bg-blue/10 transition-all">
@@ -164,14 +199,15 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
           {promptError && <div className="mt-2 text-[10px] text-red">{promptError}</div>}
         </div>
 
+        {/* Paste ChatGPT Python Code */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5 mb-2.5">
-          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Paste ChatGPT Result</div>
+          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Paste ChatGPT Python Code</div>
           <textarea
             value={chatGptResult}
             onChange={(e) => setChatGptResult(e.target.value)}
-            className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all"
+            className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-xs text-text resize-none outline-none focus:border-blue focus:shadow-[0_0_8px_#4e9eff30] transition-all font-['JetBrains_Mono']"
             rows={6}
-            placeholder="Paste the JSON that ChatGPT returned here..."
+            placeholder="Paste the Python strategy code that ChatGPT returned here..."
           />
           <div className="mt-2">
             <button onClick={handleParseStrategy} disabled={extracting} className="relative text-xs font-medium px-3 py-1.5 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden">
@@ -180,123 +216,95 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
                   <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
                   </svg>
-                  Parsing...
+                  Registering Script...
                 </span>
               ) : (
-                "Parse Strategy ↗"
+                "Register Strategy Script ↗"
               )}
             </button>
           </div>
           {parseError && <div className="mt-2 text-[10px] text-red">{parseError}</div>}
         </div>
 
+        {/* Pre-built Scripts + Params */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
-          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Extracted Strategy</div>
-          <div className="bg-dark-700 border border-dark-600 rounded-lg p-3 text-[11px] leading-relaxed text-text-dim min-h-35">
-            {extracting ? (
-              <div className="space-y-2.5 py-2">
-                <div className="skeleton h-4 w-3/4" />
-                <div className="skeleton h-4 w-full" />
-                <div className="skeleton h-4 w-2/3" />
-                <div className="skeleton h-4 w-1/2" />
-                <div className="skeleton h-4 w-3/5" />
-              </div>
-            ) : extracted && strategyConfig ? (
-              <>
-                <div>
-                  <span className="text-accent font-medium">Strategy:</span> {strategyConfig.name}
-                </div>
-                {strategyConfig.entry_conditions?.map((cond, i) => (
-                  <div key={i} className="mt-1.5">
-                    <span className="text-accent font-medium">{i === 0 ? "Entry:" : "  +"}</span>{" "}
-                    {cond.type === "crossover" ? (
-                      <>
-                        {cond.indicator?.name}(<span className="text-amber">{cond.indicator?.params?.period}</span>) crosses above {cond.crosses_above?.name}(<span className="text-amber">{cond.crosses_above?.params?.period}</span>)
-                      </>
-                    ) : cond.type === "crossunder" ? (
-                      <>
-                        {cond.indicator?.name}(<span className="text-amber">{cond.indicator?.params?.period}</span>) crosses below {cond.crosses_below?.name}(<span className="text-amber">{cond.crosses_below?.params?.period}</span>)
-                      </>
-                    ) : cond.type === "comparison" ? (
-                      <>
-                        {cond.indicator?.name}(<span className="text-amber">{cond.indicator?.params?.period}</span>) {cond.operator} <span className="text-amber">{cond.value}</span>
-                      </>
-                    ) : cond.type === "range" ? (
-                      <>
-                        {cond.indicator?.name} in range [<span className="text-amber">{cond.min}</span> – <span className="text-amber">{cond.max}</span>]
-                      </>
-                    ) : (
-                      <>{JSON.stringify(cond)}</>
-                    )}
-                  </div>
-                ))}
-                <div className="mt-1.5">
-                  <span className="text-accent font-medium">Exit:</span> {strategyConfig.exit_conditions?.length} condition(s)
-                </div>
-                <div>
-                  <span className="text-accent font-medium">Position size:</span> <span className="text-amber">{strategyConfig.position_sizing?.value}%</span> {strategyConfig.position_sizing?.method}
-                </div>
-                <div>
-                  <span className="text-accent font-medium">Stop loss:</span> {strategyConfig.stop_loss?.method}
-                </div>
-                {strategyConfig.take_profit && (
-                  <div>
-                    <span className="text-accent font-medium">Take profit:</span> {strategyConfig.take_profit.method}
-                  </div>
-                )}
-                <div className="mt-2 pt-2 border-t border-dark-600 flex gap-2">
-                  <button onClick={handleBacktest} disabled={backtesting} className="text-xs font-medium px-3 py-1 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-50">
-                    {backtesting ? "Backtesting..." : "Run Backtest ↗"}
-                  </button>
-                  <button onClick={() => onOptimize(strategyConfig!)} className="text-xs font-medium px-3 py-1 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">
-                    Optimize →
-                  </button>
-                  <button onClick={handleDeployStrategy} disabled={deploying} className="text-xs font-medium px-3 py-1 rounded-lg border border-accent bg-accent/10 text-accent hover:bg-accent-dim transition-all disabled:opacity-50">
-                    {deploying ? "Creating..." : "🚀 Deploy Bot"}
-                  </button>
-                </div>
-                {backtestError && <div className="mt-2 text-[10px] text-red">{backtestError}</div>}
-                {deployError && <div className="mt-2 text-[10px] text-red">{deployError}</div>}
-              </>
-            ) : (
-              <div className="text-center py-6 text-muted">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2a3050" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2">
-                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                </svg>
-                Generate a prompt and paste ChatGPT's result here.
-              </div>
-            )}
+          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Select / Configure Script</div>
+          <div className="flex gap-2 mb-3">
+            <select value={selectedScript} onChange={(e) => setSelectedScript(e.target.value)} className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-text outline-none focus:border-blue">
+              {availableScripts.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </div>
+          {scriptSpec && (
+            <div className="space-y-2">
+              <div className="text-[10px] text-text-dim">{scriptSpec.description}</div>
+              {Object.entries(scriptSpec.params).map(([key, spec]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted w-28 shrink-0">{key.replace(/_/g, " ")}</label>
+                  <input
+                    type="number"
+                    value={paramValues[key] ?? spec.default}
+                    onChange={(e) => setParamValues((p) => ({ ...p, [key]: Number(e.target.value) }))}
+                    min={spec.min}
+                    max={spec.max}
+                    step={spec.type === "float" ? 0.5 : 1}
+                    className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-2 py-1 text-xs text-text outline-none focus:border-blue font-['JetBrains_Mono']"
+                  />
+                  <span className="text-[9px] text-muted w-12 text-right">
+                    [{spec.min}–{spec.max}]
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 pt-2 border-t border-dark-600 flex gap-2">
+            <button onClick={handleBacktest} disabled={backtesting || !selectedScript} className="text-xs font-medium px-3 py-1 rounded-lg border border-accent bg-[#22d3a518] text-accent hover:bg-accent-dim transition-all disabled:opacity-50">
+              {backtesting ? "Backtesting..." : "Run Backtest ↗"}
+            </button>
+            <button onClick={() => onOptimize(selectedScript, paramValues)} className="text-xs font-medium px-3 py-1 rounded-lg border border-[#3a4570] bg-dark-700 text-text-dim hover:text-text transition-all">
+              Optimize →
+            </button>
+            <button onClick={handleDeployStrategy} disabled={deploying} className="text-xs font-medium px-3 py-1 rounded-lg border border-accent bg-accent/10 text-accent hover:bg-accent-dim transition-all disabled:opacity-50">
+              {deploying ? "Creating..." : "🚀 Deploy Bot"}
+            </button>
+          </div>
+          {extracted && <div className="mt-2 text-[10px] text-accent">✓ Script "{scriptName}" registered!</div>}
+          {backtestError && <div className="mt-2 text-[10px] text-red">{backtestError}</div>}
+          {deployError && <div className="mt-2 text-[10px] text-red">{deployError}</div>}
         </div>
       </div>
 
+      {/* Backtest Results */}
       <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
         <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Backtest Results {backtestResult ? `— ${backtestResult.total_trades} trades` : ""}</div>
-
         {backtestResult ? (
           <>
             <div className="grid grid-cols-2 gap-2 mb-2.5">
               <div className="bg-linear-to-br from-dark-800 to-dark-750 border border-dark-600 rounded-lg p-2.5">
-                <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Total Return</div>
-                <div className={`font-['JetBrains_Mono'] text-base font-semibold ${backtestResult.total_return >= 0 ? "text-accent" : "text-red"}`}>
-                  {backtestResult.total_return >= 0 ? "+" : ""}
-                  {backtestResult.total_return}%
+                <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Total PnL</div>
+                <div className={`font-['JetBrains_Mono'] text-base font-semibold ${backtestResult.total_pnl >= 0 ? "text-accent" : "text-red"}`}>
+                  {backtestResult.total_pnl >= 0 ? "+" : ""}
+                  {backtestResult.total_pnl}%
                 </div>
               </div>
               <div className="bg-linear-to-br from-dark-800 to-dark-750 border border-dark-600 rounded-lg p-2.5">
-                <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Sharpe Ratio</div>
-                <div className="font-['JetBrains_Mono'] text-base font-semibold text-blue">{backtestResult.sharpe_ratio}</div>
-              </div>
-              <div className="bg-linear-to-br from-dark-800 to-dark-750 border border-dark-600 rounded-lg p-2.5">
                 <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Max Drawdown</div>
-                <div className="font-['JetBrains_Mono'] text-base font-semibold text-red">{backtestResult.max_drawdown}%</div>
+                <div className="font-['JetBrains_Mono'] text-base font-semibold text-red">-{Math.abs(backtestResult.max_drawdown)}%</div>
               </div>
               <div className="bg-linear-to-br from-dark-800 to-dark-750 border border-dark-600 rounded-lg p-2.5">
-                <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Win Rate</div>
-                <div className="font-['JetBrains_Mono'] text-base font-semibold text-amber">{backtestResult.win_rate}%</div>
+                <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Profitable Trades</div>
+                <div className="font-['JetBrains_Mono'] text-base font-semibold text-accent">
+                  {backtestResult.profitable_trades}/{backtestResult.total_trades}
+                </div>
+              </div>
+              <div className="bg-linear-to-br from-dark-800 to-dark-750 border border-dark-600 rounded-lg p-2.5">
+                <div className="text-[10px] font-medium text-muted tracking-wider uppercase mb-1">Profit Factor</div>
+                <div className="font-['JetBrains_Mono'] text-base font-semibold text-amber">{backtestResult.profit_factor ?? "∞"}</div>
               </div>
             </div>
-
             {backtestResult.equity_curve?.length > 0 && (
               <div className="bg-dark-700 border border-dark-600 rounded-lg p-2.5 mb-2">
                 <div className="text-[10px] text-muted mb-1">EQUITY CURVE</div>
@@ -319,19 +327,18 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
                 </svg>
               </div>
             )}
-
             <div className="text-[10px] text-muted font-['JetBrains_Mono']">
               <div className="flex justify-between py-0.5 border-b border-dark-600">
                 <span>Total Trades</span>
                 <span className="text-text">{backtestResult.total_trades}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-dark-600">
-                <span>Avg Hold (periods)</span>
-                <span className="text-text">{backtestResult.avg_hold_days}</span>
+                <span>Sharpe Ratio</span>
+                <span className="text-blue">{backtestResult.sharpe_ratio}</span>
               </div>
               <div className="flex justify-between py-0.5">
-                <span>Profit Factor</span>
-                <span className="text-accent">{backtestResult.profit_factor ?? "∞"}</span>
+                <span>Final Capital</span>
+                <span className="text-text">${backtestResult.final_capital?.toFixed(2) ?? "10,000.00"}</span>
               </div>
             </div>
           </>
@@ -340,7 +347,7 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2a3050" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            Parse a strategy, then run a backtest to see results here.
+            Select a script, configure params, then run a backtest.
           </div>
         )}
       </div>
@@ -350,15 +357,13 @@ export default function Idea({ onOptimize, onNavigate }: IdeaProps) {
 
 function generateEquityPath(curve: number[], width: number, height: number): string {
   if (curve.length < 2) return "";
-  const min = Math.min(...curve);
-  const max = Math.max(...curve);
-  const range = max - min || 1;
+  const min = Math.min(...curve),
+    max = Math.max(...curve),
+    range = max - min || 1;
   const points = curve.map((p, i) => {
     const x = (i / (curve.length - 1)) * width;
     const y = height - ((p - min) / range) * (height * 0.85) - height * 0.075;
     return `${x},${y}`;
   });
-  const top = `M0,${height} L${points[0]} L${points.slice(1).join(" L")} L${width},${height}Z`;
-  const bottom = `M${points[0]} ${points.slice(1).join(" L")}`;
-  return top + " " + bottom;
+  return `M0,${height} L${points[0]} L${points.slice(1).join(" L")} L${width},${height}Z M${points[0]} ${points.slice(1).join(" L")}`;
 }

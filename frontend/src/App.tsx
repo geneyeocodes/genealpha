@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { PageTab, StrategyConfig } from "./types";
+import type { PageTab } from "./types";
 import Navbar from "./components/Navbar";
 import Dashboard from "./pages/Dashboard";
 import Idea from "./pages/Idea";
@@ -11,7 +11,7 @@ function App() {
   const [wsStatus, setWsStatus] = useState<"connected" | "disconnected" | "connecting">("connecting");
   const wsRef = useRef<WebSocket | null>(null);
   const [transitionKey, setTransitionKey] = useState(0);
-  const [optimizeConfig, setOptimizeConfig] = useState<StrategyConfig | null>(null);
+  const [optimizeScript, setOptimizeScript] = useState<{ name: string; params: Record<string, number> } | null>(null);
   const [deployBotId, setDeployBotId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,8 +47,8 @@ function App() {
     setTransitionKey((k) => k + 1);
   };
 
-  const handleOptimize = (config: StrategyConfig) => {
-    setOptimizeConfig(config);
+  const handleOptimize = (scriptName: string, params: Record<string, number>) => {
+    setOptimizeScript({ name: scriptName, params });
     setActiveTab("optimize");
     setTransitionKey((k) => k + 1);
   };
@@ -71,7 +71,7 @@ function App() {
       case "optimize":
         return (
           <div key={transitionKey} className={className}>
-            <Optimize strategyConfig={optimizeConfig} onNavigate={handleNavigate} />
+            <Optimize scriptName={optimizeScript?.name ?? null} scriptParams={optimizeScript?.params ?? null} onNavigate={handleNavigate} />
           </div>
         );
       case "deploy":

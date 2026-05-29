@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Bot, StrategyConfig } from "../types";
+import type { Bot } from "../types";
 import { apiGet, apiPost } from "../api/client";
 
 interface DeployProps {
@@ -11,8 +11,6 @@ export default function Deploy({ botId }: DeployProps) {
   const [loading, setLoading] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const strategyConfig: StrategyConfig | null = bot ? (bot.strategy_config as unknown as StrategyConfig) : null;
 
   useEffect(() => {
     if (!botId) return;
@@ -74,7 +72,7 @@ export default function Deploy({ botId }: DeployProps) {
   }
 
   const isRunning = bot.status === "running";
-  const params = strategyConfig ? flattenStrategyParams(strategyConfig) : [];
+  const params = bot.script_params || {};
 
   return (
     <div>
@@ -92,23 +90,18 @@ export default function Deploy({ botId }: DeployProps) {
           <StatusBadge status={bot.status} />
         </div>
 
-        {/* Strategy Parameters */}
+        {/* Strategy Script Configuration */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3.5">
-          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Strategy Parameters</div>
-          {params.length > 0 ? (
-            params.map((p, i) => <FieldGroup key={i} label={p.label} value={p.value} />)
-          ) : (
-            <div className="text-[11px] text-text-dim">
-              <pre className="bg-dark-700 rounded-lg p-2.5 overflow-x-auto text-[10px]">{JSON.stringify(bot.strategy_config, null, 2)}</pre>
-            </div>
-          )}
+          <div className="text-[11px] font-semibold text-muted tracking-wider uppercase mb-2.5">Strategy Script</div>
+          <FieldGroup label="Script Name" value={bot.script_name} />
+          {Object.keys(params).length > 0 ? Object.entries(params).map(([key, val]) => <FieldGroup key={key} label={key.replace(/_/g, " ")} value={String(val)} />) : <div className="text-[11px] text-text-dim">No custom parameters — using script defaults</div>}
         </div>
       </div>
 
-      {/* Deploy confirmation */}
+      {/* Deploy / Stop action */}
       <div className="mt-3 bg-linear-to-br from-[#22d3a518] to-[#0f4a3720] border border-accent/40 rounded-xl p-3.5 flex items-center justify-between group hover:border-accent/60 transition-all">
         <div className="text-[11px] text-text-dim leading-relaxed">
-          <strong className="text-text">{bot.name}</strong> · {bot.symbol} · {bot.account_mode === "paper" ? "Paper" : "Live"} · {bot.order_type} orders
+          <strong className="text-text">{bot.name}</strong> · {bot.symbol} · {bot.script_name} · {bot.account_mode === "paper" ? "Paper" : "Live"}
           <br />
           Max position ${bot.max_position_size} · Daily stop ${bot.max_daily_loss}
         </div>
@@ -195,28 +188,4 @@ function StatusBadge({ status }: { status: string }) {
       <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded border ${cls}`}>{status.toUpperCase()}</span>
     </div>
   );
-}
-
-function flattenStrategyParams(config: StrategyConfig): { label: string; value: string }[] {
-  const result: { label: string; value: string }[] = [];
-  config.entry_conditions?.forEach((c, i) => {
-    if (c.type === "crossover" && c.indicator && c.crosses_above) {
-      result.push({ label: `Entry ${i + 1}: ${c.indicator.name.toUpperCase()}(${c.indicator.params?.period ?? 14}) cross above ${c.crosses_above.name.toUpperCase()}(${c.crosses_above.params?.period ?? 50})`, value: "crossover" });
-    } else if (c.type === "comparison" && c.indicator) {
-      result.push({ label: `Entry ${i + 1}: ${c.indicator.name.toUpperCase()}(${c.indicator.params?.period ?? 14}) ${c.operator} ${c.value}`, value: "comparison" });
-    }
-  });
-  config.exit_conditions?.forEach((c, i) => {
-    if (c.type === "crossunder" && c.indicator && c.crosses_below) {
-      result.push({ label: `Exit ${i + 1}: ${c.indicator.name.toUpperCase()}(${c.indicator.params?.period ?? 14}) cross below ${c.crosses_below.name.toUpperCase()}(${c.crosses_below.params?.period ?? 50})`, value: "crossunder" });
-    } else if (c.type === "comparison" && c.indicator) {
-      result.push({ label: `Exit ${i + 1}: ${c.indicator.name.toUpperCase()}(${c.indicator.params?.period ?? 14}) ${c.operator} ${c.value}`, value: "comparison" });
-    }
-  });
-  result.push({ label: "Position Sizing", value: `${config.position_sizing?.value ?? "?"}% ${config.position_sizing?.method ?? "?"}` });
-  const sl = config.stop_loss;
-  result.push({ label: "Stop Loss", value: `${sl?.method ?? "?"} ${JSON.stringify(sl?.params ?? {})}` });
-  if (config.take_profit) result.push({ label: "Take Profit", value: `${config.take_profit.method} ${JSON.stringify(config.take_profit.params)}` });
-  result.push({ label: "Timeframe", value: config.timeframe ?? "1d" });
-  return result;
 }

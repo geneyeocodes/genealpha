@@ -7,7 +7,8 @@ export interface Bot {
   order_type: "market" | "limit" | "moc";
   max_position_size: number;
   max_daily_loss: number;
-  strategy_config: Record<string, unknown>;
+  script_name: string;
+  script_params: Record<string, number>;
   schedule_cron: string;
   created_at: string;
 }
@@ -24,19 +25,19 @@ export interface Trade {
 }
 
 export interface BacktestResult {
-  total_return: number;
-  sharpe_ratio: number;
+  total_pnl: number;
   max_drawdown: number;
-  win_rate: number;
+  profitable_trades: number;
   total_trades: number;
-  avg_hold_days: number;
   profit_factor: number | null;
+  sharpe_ratio: number;
+  final_capital: number;
   equity_curve: number[];
-  final_capital?: number;
   trades?: Array<{
     entry_price: number;
     exit_price: number;
     pnl: number;
+    return_pct: number;
   }>;
   id?: string;
   bot_id?: string;
@@ -44,54 +45,47 @@ export interface BacktestResult {
 }
 
 export interface OptimizationResult {
-  id: string;
-  bot_id: string;
-  total_trials: number;
   best_params: Record<string, number>;
-  best_sharpe: number;
-  best_return: number;
-  best_drawdown: number;
-  results: Array<Record<string, number>>;
-  created_at: string;
+  best_composite_score: number;
+  best_total_pnl: number;
+  best_max_drawdown: number;
+  best_profitable_trades: number;
+  best_profit_factor: number | null;
+  top_results: Array<OptimizationTopResult>;
 }
 
-export interface StrategyConfig {
+export interface OptimizationTopResult {
+  params: Record<string, number>;
+  composite_score: number;
+  total_pnl: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
+  win_rate: number;
+  total_trades: number;
+  profitable_trades: number;
+  profit_factor: number | null;
+}
+
+export interface StrategyScript {
   name: string;
-  entry_conditions: Condition[];
-  exit_conditions: Condition[];
-  position_sizing: { method: string; value: number };
-  stop_loss: { method: string; params: Record<string, unknown> };
-  take_profit?: { method: string; params: Record<string, unknown> } | null;
-  timeframe: string;
+  description: string;
+  params: Record<string, ScriptParamSpec>;
+  param_count: number;
 }
 
-export interface Condition {
-  type: "crossover" | "crossunder" | "comparison" | "range" | "and" | "or";
-  indicator?: IndicatorRef | null;
-  crosses_above?: IndicatorRef | null;
-  crosses_below?: IndicatorRef | null;
-  source?: string | null;
-  operator?: string | null;
-  value?: number | null;
-  min?: number | null;
-  max?: number | null;
-  conditions?: Condition[] | null;
-  compare_to_indicator?: IndicatorRef | null;
-}
-
-export interface IndicatorRef {
-  name: string;
-  params: {
-    period?: number;
-    source?: string;
-    stddev?: number;
-  };
+export interface ScriptParamSpec {
+  type: "int" | "float";
+  min: number;
+  max: number;
+  default: number;
+  description: string;
 }
 
 export interface ExtractResponse {
-  strategy: StrategyConfig;
-  source_type: string;
-  raw_excerpt: string | null;
+  script_name: string;
+  param_count: number;
+  params: Record<string, ScriptParamSpec>;
+  source_code: string;
 }
 
 export type PageTab = "dashboard" | "idea" | "optimize" | "deploy";

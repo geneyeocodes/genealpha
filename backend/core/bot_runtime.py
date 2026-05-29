@@ -1,7 +1,6 @@
 """
 In-memory bot runtime manager.
-Runs each deployed bot as an asyncio task that periodically checks for signals
-and places trades via IBKR (or logs them in paper mode).
+Runs each deployed bot by executing strategy scripts and placing trades.
 """
 
 import asyncio
@@ -12,17 +11,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import async_session
 from .models import Bot, BotStatus, Trade
-from .datafeed import fetch_historical_data, fetch_intraday_data
+from .datafeed import fetch_historical_data
 from .ibkr import IBKRConnector
-from ..strategies.engine import StrategyEngine
-from ..strategies.config_schema import StrategyConfig
+from ..scripts.base import get_script
+from ..scripts.runner import run_backtest
 from ..api.ws import manager as ws_manager
 
 logger = logging.getLogger(__name__)
 
 
 class BotRuntimeManager:
-    """Manages in-memory asyncio tasks for running bots."""
+    """Manages in-memory asyncio tasks for running bots via strategy scripts."""
 
     def __init__(self):
         self._tasks: Dict[str, asyncio.Task] = {}
@@ -66,49 +65,69 @@ class BotRuntimeManager:
                 await self.start_bot(bot)
 
     async def _run_bot_loop(self, bot: Bot) -> None:
-        """Background loop: fetch data -> generate signals -> place trades."""
+        """Background loop: fetch data -> run strategy script -> check signals -> place trades."""
         try:
-            config = StrategyConfig(**bot.strategy_config)
-            engine = StrategyEngine(config)
+            spec = get_script(bot.script_name)
+            if spec is None:
+                logger.error("Bot %s: script '%s' not found", bot.name, bot.script_name)
+                return
 
             while True:
                 try:
-                    tf = config.timeframe or "1d"
-                    sleep_seconds = self._timeframe_to_seconds(tf)
+                    sleep_seconds = 86400  # default: once per day
 
                     # Fetch latest data
-                    if tf in ("1m", "5m", "15m", "30m", "1h"):
-                        df = fetch_intraday_data(bot.symbol, period="5d", interval=tf)
-                    else:
-                        end = datetime.utcnow().strftime("%Y-%m-%d")
-                        start = (datetime.utcnow() - timedelta(days=365)).strftime("%Y-%m-%d")
-                        df = fetch_historical_data(bot.symbol, start, end)
+                    end = datetime.utcnow().strftime("%Y-%m-%d")
+                    start = (datetime.utcnow() - timedelta(days=365)).strftime("%Y-%m-%d")
+                    df = fetch_historical_data(bot.symbol, start, end)
 
+                    last_price = 0.0
                     if df is not None and not df.empty:
-                        signals = engine.generate_signals(df)
-                        if not signals.empty:
-                            latest = signals.iloc[-1]
-                            signal = latest.get("signal")
+                        # Run the script
+                        result = spec.run_func(df, bot.script_params or {})
+                        entries = result.get("entries")
+                        exits = result.get("exits")
 
-                            if signal in ("buy", "sell", "stop_loss"):
-                                side = "BUY" if signal == "buy" else "SELL"
-                                price = float(latest["close"])
-                                quantity = self._calc_quantity(bot, price, config, latest)
+                        if entries is not None and exits is not None:
+                            # Check latest signal
+                            latest_entry = entries.iloc[-1] if not entries.empty else False
+                            latest_exit = exits.iloc[-1] if not exits.empty else False
+                            last_price = float(df["close"].iloc[-1])
 
+                            if latest_entry:
+                                # Entry signal
+                                quantity = self._calc_quantity(bot, last_price)
                                 if quantity > 0:
-                                    await self._place_order(bot, side, quantity, price)
+                                    side = "BUY"
+                                    await self._place_order(bot, side, quantity, last_price)
+                                    signal = "buy"
+                                else:
+                                    signal = None
+                            elif latest_exit:
+                                # Exit signal
+                                quantity = self._calc_quantity(bot, last_price)
+                                if quantity > 0:
+                                    side = "SELL"
+                                    await self._place_order(bot, side, quantity, last_price)
+                                    signal = "sell"
+                                else:
+                                    signal = None
+                            else:
+                                signal = None
+                        else:
+                            signal = None
 
-                            # Broadcast via WebSocket
-                            await ws_manager.broadcast(
-                                {
-                                    "type": "bot_update",
-                                    "bot_id": bot.id,
-                                    "status": "running",
-                                    "signal": signal,
-                                    "price": float(latest["close"]) if "close" in latest else None,
-                                    "timestamp": str(latest.get("timestamp", datetime.utcnow())),
-                                }
-                            )
+                        # Broadcast via WebSocket
+                        await ws_manager.broadcast(
+                            {
+                                "type": "bot_update",
+                                "bot_id": bot.id,
+                                "status": "running",
+                                "signal": signal,
+                                "price": last_price,
+                                "timestamp": str(datetime.utcnow()),
+                            }
+                        )
 
                     await asyncio.sleep(sleep_seconds)
 
@@ -152,28 +171,14 @@ class BotRuntimeManager:
         except Exception as e:
             logger.error("Order placement failed for bot %s: %s", bot.name, e)
 
-    def _calc_quantity(self, bot: Bot, price: float, config: StrategyConfig, latest_row) -> float:
+    def _calc_quantity(self, bot: Bot, price: float) -> float:
         if price <= 0:
             return 0
-        sizing = config.position_sizing
-        if sizing.method == "percent_equity":
-            return (bot.max_position_size * (sizing.value / 100)) / price
-        elif sizing.method == "fixed_quantity":
-            return sizing.value
-        else:
-            return (bot.max_position_size * (sizing.value / 100)) / price
+        return bot.max_position_size / price
 
     @staticmethod
     def _timeframe_to_seconds(tf: str) -> int:
-        mapping = {
-            "1m": 60,
-            "5m": 300,
-            "15m": 900,
-            "30m": 1800,
-            "1h": 3600,
-            "4h": 14400,
-            "1d": 86400,
-        }
+        mapping = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
         return mapping.get(tf, 86400)
 
 
